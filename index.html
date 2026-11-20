@@ -38,6 +38,10 @@
 
 <main>
 
+    <button id="openRecurringMenu" class="primary-button" type="button" style="margin-bottom:16px">
+        Inserir lançamentos recorrentes
+    </button>
+
     <section class="balance-card">
         <span>Saldo projetado do mês</span>
         <h2 id="balance">R$ 0,00</h2>
@@ -149,58 +153,8 @@
         </div>
 
         <p class="helper">
-            O botão de exclusão de cada dia remove somente os lançamentos manuais daquele dia. As programações recorrentes são preservadas.
+            O botão de exclusão de cada dia remove somente os lançamentos manuais daquele dia. Os lançamentos recorrentes são preservados.
         </p>
-    </section>
-
-    <section class="section">
-        <div class="section-title">
-            <h3>Programações recorrentes</h3>
-            <button class="outline-button" id="openPlanning">+ Programar</button>
-        </div>
-
-        <p class="helper">
-            Cadastre recebimentos e pagamentos futuros. Toque no valor de uma programação para alterá-lo apenas no mês atual.
-        </p>
-
-        <div id="planningFormContainer" class="hidden">
-            <form id="planningForm">
-
-                <label for="planDescription">Descrição</label>
-                <input id="planDescription" type="text"
-                       placeholder="Ex: Salário, aluguel, internet" required>
-
-                <label for="planAmount">Valor (R$)</label>
-                <input id="planAmount" type="number" min="0.01" step="0.01" required>
-
-                <label for="planType">Tipo</label>
-                <select id="planType">
-                    <option value="income">Entrada</option>
-                    <option value="debit">Saída no débito</option>
-                </select>
-
-                <label for="planDate">Primeira data</label>
-                <input id="planDate" type="date" required>
-
-                <label for="planRepeat">Repetição</label>
-                <select id="planRepeat">
-                    <option value="once">Somente uma vez</option>
-                    <option value="monthly">Todo mês</option>
-                    <option value="yearly">Todo ano</option>
-                </select>
-
-                <div class="form-buttons">
-                    <button type="submit" class="primary-button">
-                        Salvar programação
-                    </button>
-                    <button type="button" class="cancel-button" id="closePlanning">
-                        Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <div id="planningList"></div>
     </section>
 
     <section class="section">
@@ -249,6 +203,71 @@
             Apagar todos os dados do mês
         </button>
     </section>
+
+    <div id="recurringMenu" class="modal-overlay hidden"
+         role="dialog" aria-modal="true">
+        <div class="modal-card" style="max-width:560px">
+            <h3>Lançamentos recorrentes</h3>
+            <p class="helper">
+                Lançamentos com data início e, opcionalmente, data fim. Enquanto não tiver data fim, ficam ativos para sempre.
+            </p>
+
+            <div id="recurringList"></div>
+
+            <div id="recurringFormContainer" class="hidden">
+                <form id="recurringForm" style="margin-top:16px">
+                    <label for="recurringDescription">Descrição</label>
+                    <input id="recurringDescription" type="text" placeholder="Ex: Salário, aluguel" required>
+
+                    <label for="recurringAmount">Valor (R$)</label>
+                    <input id="recurringAmount" type="number" min="0.01" step="0.01" required>
+
+                    <label for="recurringType">Tipo</label>
+                    <select id="recurringType">
+                        <option value="income">Entrada</option>
+                        <option value="debit">Saída no débito</option>
+                    </select>
+
+                    <label for="recurringFrequency">Frequência</label>
+                    <select id="recurringFrequency">
+                        <option value="monthly">Todo mês</option>
+                        <option value="yearly">Todo ano</option>
+                    </select>
+
+                    <label for="recurringStart">Data início</label>
+                    <input id="recurringStart" type="date" required>
+
+                    <label class="checkbox-option">
+                        <input id="recurringHasEnd" type="checkbox">
+                        <span>Este lançamento tem data fim</span>
+                    </label>
+
+                    <div id="recurringEndContainer" class="hidden">
+                        <label for="recurringEnd">Data fim</label>
+                        <input id="recurringEnd" type="date">
+                    </div>
+
+                    <div class="form-buttons">
+                        <button type="submit" class="primary-button">
+                            Salvar lançamento recorrente
+                        </button>
+                        <button type="button" class="cancel-button" id="closeRecurringForm">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="modal-actions">
+                <button id="openRecurringForm" class="primary-button" type="button">
+                    + Novo
+                </button>
+                <button id="closeRecurringMenu" class="cancel-button" type="button">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
 
     <div id="deleteOptionsModal" class="modal-overlay hidden"
          role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
@@ -354,28 +373,6 @@
                     </button>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <div id="scopeModal" class="modal-overlay hidden"
-         role="dialog" aria-modal="true" aria-labelledby="scopeModalTitle">
-        <div class="modal-card">
-            <h3 id="scopeModalTitle">Aplicar alteração</h3>
-            <p id="scopeModalDescription" class="helper"></p>
-
-            <label class="checkbox-option">
-                <input id="scopeFutureCheckbox" type="checkbox">
-                <span>Incluir este mês e os meses futuros</span>
-            </label>
-
-            <div class="modal-actions">
-                <button id="cancelScopeButton" class="cancel-button" type="button">
-                    Cancelar
-                </button>
-                <button id="confirmScopeButton" class="primary-button" type="button">
-                    Confirmar
-                </button>
-            </div>
         </div>
     </div>
 
