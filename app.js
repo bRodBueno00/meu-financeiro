@@ -667,6 +667,50 @@ function getDayValues(date, actual, scheduled) {
 }
 
 // ==========================================
+// SALDO DE HOJE
+// ==========================================
+
+function getTodayBalance() {
+    const today = new Date();
+    const todayStr = localDate(today);
+
+    const todayMonthKey = monthKey(today);
+    const selectedMonthKey = monthKey(selectedDate);
+
+    if (todayMonthKey !== selectedMonthKey) {
+        return null;
+    }
+
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+
+    const actual = transactions.filter(item =>
+        item.date.startsWith(monthKey(selectedDate))
+    );
+
+    const scheduled = getMonthlyOccurrences();
+
+    const invoice = getInvoiceAmount();
+    const invoiceDue = getInvoiceDueDate();
+
+    let balance = getOpeningBalance(selectedDate);
+
+    const todayDay = today.getDate();
+
+    for (let day = 1; day <= todayDay; day++) {
+        const currentDay = localDate(new Date(year, month, day, 12));
+        const values = getDayValues(currentDay, actual, scheduled);
+
+        let debit = values.debit;
+        if (currentDay === invoiceDue) debit += invoice;
+
+        balance += values.income - debit;
+    }
+
+    return balance;
+}
+
+// ==========================================
 // ATUALIZAÇÃO DO PAINEL
 // ==========================================
 
@@ -711,6 +755,11 @@ function updateDashboard() {
     $("received").textContent = money(incomeActual);
     $("creditTotal").textContent = money(creditActual);
     $("debitTotal").textContent = money(debitActual);
+
+    const todayBalance = getTodayBalance();
+    $("todayBalance").textContent = todayBalance === null
+        ? "—"
+        : money(todayBalance);
 
     $("currentMonth").textContent =
         selectedDate.toLocaleDateString("pt-BR", {
@@ -874,13 +923,199 @@ function createEditableCell(value, className, type, date, tooltip = "") {
     cell.className = `money-cell ${className}`;
     cell.textContent = value > 0 ? money(value) : "+";
 
-    cell.title = tooltip || "Toque para adicionar um lançamento";
+    cell.title = tooltip || "Toque para ver e gerenciar os lançamentos";
 
     cell.addEventListener("click", () => {
-        addCalendarTransaction(type, date);
+        openDayTransactionsModal(date, type);
     });
 
     return cell;
+}
+
+function openDayTransactionsModal(date, type) {
+    const modal = $("dayTransactionsModal");
+    const list = $("dayTransactionsList");
+
+    $("dayModalTitle").textContent = `Lançamentos de ${formatDate(date)}`;
+
+    const actual = transactions.filter(item =>
+        item.date.startsWith(monthKey(selectedDate))
+    );
+    const scheduled = getMonthlyOccurrences();
+    const values = getDayValues(date, actual, scheduled);
+
+    const invoiceAmount = getInvoiceAmount();
+    const invoiceDueDate = getInvoiceDueDate();
+    const isInvoiceDay = date === invoiceDueDate && invoiceAmount > 0;
+
+    const labels = {
+        income: "Entrada",
+        credit: "Crédito",
+        debit: "Débito"
+    };
+
+    let items = [];
+
+    if (type === "income") {
+        items = values.all.filter(x => x.type === "income");
+    } else if (type === "credit") {
+        items = actual.filter(x => x.type === "credit" && x.date === date);
+    } else if (type === "debit") {
+        items = values.all.filter(x => x.type === "debit");
+    }
+
+    list.innerHTML = "";
+
+    if (items.length === 0 && !(type === "debit" && isInvoiceDay)) {
+        const empty = document.createElement("p");
+        empty.className = "empty-message";
+        empty.textContent = "Nenhum lançamento nesta categoria.";
+        list.appendChild(empty);
+    } else {
+        items.forEach(item => {
+            const row = document.createElement("div");
+            row.className = "day-transaction-item";
+
+            const info = document.createElement("div");
+            info.className = "item-info";
+
+            const name = document.createElement("strong");
+            name.textContent = item.description || labels[item.type];
+
+            const details = document.createElement("small");
+            details.textContent = labels[item.type];
+
+            info.append(name, details);
+
+            const actions = document.createElement("div");
+            actions.className = "item-actions";
+
+            const value = document.createElement("span");
+            value.className = "item-value " +
+                (item.type === "income" ? "green" :
+                 item.type === "credit" ? "blue" : "red");
+
+            value.textContent =
+                `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+
+            value.addEventListener("click", () => {
+                if (item.occurrenceDate) {
+                    editPlanOccurrence(item);
+                } else {
+                    editTransaction(item);
+                }
+            });
+
+            const remove = document.createElement("button");
+            remove.className = "delete-button";
+            remove.textContent = "✕";
+            remove.title = "Excluir lançamento";
+
+            remove.addEventListener("click", () => {
+                if (!confirm("Excluir este lançamento?")) return;
+
+                if (item.occurrenceDate) {
+                    const exclusion = `${item.id}|${item.occurrenceDate}`;
+                    if (!skippedOccurrences.includes(exclusion)) {
+                        skippedOccurrences.push(exclusion);
+                    }
+                } else {
+                    transactions = transactions.filter(x => x.id !== item.id);
+                }
+
+                saveData();
+                updateDashboard();
+                closeDayModal();
+            });
+
+            actions.append(value, remove);
+            row.append(info, actions);
+            list.appendChild(row);
+        });
+
+        if (type === "debit" && isInvoiceDay) {
+            const row = document.createElement("div");
+            row.className = "day-transaction-item";
+
+            const info = document.createElement("div");
+            info.className = "item-info";
+
+            const name = document.createElement("strong");
+            name.textContent = "Fatura do cartão";
+
+            const details = document.createElement("small");
+            details.textContent = "Débito";
+
+            info.append(name, details);
+
+            const actions = document.createElement("div");
+            actions.className = "item-actions";
+
+            const value = document.createElement("span");
+            value.className = "item-value red";
+            value.textContent = `- ${money(invoiceAmount)}`;
+
+            actions.append(value);
+            row.append(info, actions);
+            list.appendChild(row);
+        }
+    }
+
+    $("addDayTransactionButton").onclick = () => {
+        closeDayModal();
+        addCalendarTransaction(type, date);
+    };
+
+    modal.classList.remove("hidden");
+}
+
+function closeDayModal() {
+    $("dayTransactionsModal").classList.add("hidden");
+}
+
+function editPlanOccurrence(item) {
+    const key = `${item.id}|${monthKey(selectedDate)}`;
+    const currentAmount = item.amount;
+
+    const msg = `Editar valor de "${item.description}" para o mês de ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.\n\nDigite o novo valor (ou deixe em branco para restaurar o valor original):`;
+    const novoValorStr = prompt(msg, currentAmount);
+
+    if (novoValorStr === null) return;
+
+    const novoValor = parseFloat(novoValorStr.replace(",", "."));
+
+    if (novoValorStr.trim() === "") {
+        delete planOverrides[key];
+    } else if (!isNaN(novoValor) && novoValor > 0) {
+        planOverrides[key] = Math.round(novoValor * 100) / 100;
+    } else {
+        alert("Valor inválido.");
+        return;
+    }
+
+    saveData();
+    updateDashboard();
+    closeDayModal();
+}
+
+function editTransaction(item) {
+    const novoValorStr = prompt(
+        `Editar valor de "${item.description}".\n\nDigite o novo valor (ou deixe em branco para manter):`,
+        item.amount
+    );
+
+    if (novoValorStr === null) return;
+
+    const novoValor = parseFloat(novoValorStr.replace(",", "."));
+
+    if (!isNaN(novoValor) && novoValor > 0) {
+        item.amount = Math.round(novoValor * 100) / 100;
+        saveData();
+        updateDashboard();
+        closeDayModal();
+    } else if (novoValorStr.trim() !== "") {
+        alert("Valor inválido.");
+    }
 }
 
 function addCalendarTransaction(type, date) {
@@ -961,8 +1196,16 @@ function renderTransactions(items) {
                 (item.type === "income" ? "green" :
                  item.type === "credit" ? "blue" : "red");
 
+            value.style.cursor = "pointer";
+            value.style.textDecoration = "underline dashed";
+            value.title = "Clique para editar o valor";
+
             value.textContent =
                 `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+
+            value.addEventListener("click", () => {
+                editTransaction(item);
+            });
 
             const remove = document.createElement("button");
             remove.className = "delete-button";
@@ -1278,6 +1521,12 @@ $("confirmDeleteButton").addEventListener("click", confirmSelectedDeletion);
 
 $("deleteOptionsModal").addEventListener("click", event => {
     if (event.target === $("deleteOptionsModal")) closeDeleteOptions();
+});
+
+$("closeDayModalButton").addEventListener("click", closeDayModal);
+
+$("dayTransactionsModal").addEventListener("click", event => {
+    if (event.target === $("dayTransactionsModal")) closeDayModal();
 });
 
 // ==========================================
