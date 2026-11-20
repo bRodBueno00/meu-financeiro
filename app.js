@@ -66,7 +66,7 @@ function makeId() {
 
 function getDataSnapshot() {
     return {
-        version: 7,
+        version: 8,
         transactions,
         initialBalances,
         invoiceSettings
@@ -75,7 +75,7 @@ function getDataSnapshot() {
 
 function getRecurringSnapshot() {
     return {
-        version: 2,
+        version: 3,
         recurring
     };
 }
@@ -98,13 +98,16 @@ function applyDataSnapshot(data) {
         recurring = data.plans.map(plan => ({
             id: plan.id || makeId(),
             description: plan.description,
-            amount: plan.amount,
             type: plan.type === "expense" ? "debit" : plan.type,
-            startDate: plan.date,
-            endDate: plan.repeat === "once" ? plan.date : null,
-            hasEndDate: plan.repeat === "once",
+            frequency: plan.repeat === "yearly" ? "yearly" : "monthly",
             dayOfMonth: parseDate(plan.date).getDate(),
-            frequency: plan.repeat === "yearly" ? "yearly" : "monthly"
+            versions: [
+                {
+                    amount: plan.amount,
+                    startDate: plan.date,
+                    endDate: plan.repeat === "once" ? plan.date : null
+                }
+            ]
         }));
     }
 }
@@ -563,11 +566,44 @@ function saveInitialBalance() {
 // LANÇAMENTOS RECORRENTES
 // ==========================================
 
+function getVersionForDate(item, date) {
+    if (!item.versions || !item.versions.length) return null;
+
+    const target = localDate(new Date(date.getFullYear(), date.getMonth(), 1, 12));
+
+    const sorted = [...item.versions].sort((a, b) =>
+        a.startDate.localeCompare(b.startDate)
+    );
+
+    let chosen = null;
+
+    for (const v of sorted) {
+        if (v.startDate <= target) {
+            if (!v.endDate || v.endDate >= target) {
+                chosen = v;
+            }
+        }
+    }
+
+    return chosen;
+}
+
 function recurringIsActiveInMonth(item, date) {
     const year = date.getFullYear();
     const month = date.getMonth();
 
-    const start = parseDate(item.startDate);
+    if (!item.versions || !item.versions.length) return null;
+
+    const firstOfMonth = localDate(new Date(year, month, 1, 12));
+
+    const firstVersionStart = [...item.versions]
+        .map(v => v.startDate)
+        .sort()[0];
+
+    const start = parseDate(firstVersionStart);
+
+    const version = getVersionForDate(item, new Date(year, month, 1, 12));
+    if (!version) return null;
 
     if (item.frequency === "yearly") {
         if (year < start.getFullYear()) return null;
@@ -577,14 +613,14 @@ function recurringIsActiveInMonth(item, date) {
         const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
         const occurrence = localDate(new Date(year, month, day, 12));
 
-        if (occurrence < item.startDate) return null;
-        if (item.endDate && occurrence > item.endDate) return null;
+        if (occurrence < version.startDate) return null;
+        if (version.endDate && occurrence > version.endDate) return null;
 
-        return occurrence;
+        return { occurrence, version };
     }
 
-    const first = new Date(year, month, 1, 12);
-    if (first < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
+    const fm = new Date(year, month, 1, 12);
+    if (fm < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
         return null;
     }
 
@@ -592,19 +628,23 @@ function recurringIsActiveInMonth(item, date) {
     const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
     const occurrence = localDate(new Date(year, month, day, 12));
 
-    if (occurrence < item.startDate) return null;
-    if (item.endDate && occurrence > item.endDate) return null;
+    if (occurrence < version.startDate) return null;
+    if (version.endDate && occurrence > version.endDate) return null;
 
-    return occurrence;
+    return { occurrence, version };
 }
 
 function getOccurrencesForMonth(date) {
     const occurrences = [];
 
     recurring.forEach(item => {
-        const occurrence = recurringIsActiveInMonth(item, date);
-        if (occurrence) {
-            occurrences.push({ ...item, occurrenceDate: occurrence });
+        const result = recurringIsActiveInMonth(item, date);
+        if (result) {
+            occurrences.push({
+                ...item,
+                amount: result.version.amount,
+                occurrenceDate: result.occurrence
+            });
         }
     });
 
@@ -1422,6 +1462,12 @@ function renderRecurringList() {
     }
 }
 
+function getActiveVersionDisplay(item) {
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    const version = getVersionForDate(item, monthStart);
+    return version || item.versions[item.versions.length - 1];
+}
+
 function buildRecurringRow(item) {
     const row = document.createElement("div");
     row.className = "planning-item";
@@ -1432,11 +1478,13 @@ function buildRecurringRow(item) {
     const name = document.createElement("strong");
     name.textContent = item.description;
 
+    const version = getActiveVersionDisplay(item);
+
     const details = document.createElement("small");
-    const end = item.endDate
-        ? `até ${formatDate(item.endDate)}`
+    const end = version.endDate
+        ? `até ${formatDate(version.endDate)}`
         : "sem data fim";
-    details.textContent = `Início ${formatDate(item.startDate)} • ${end}`;
+    details.textContent = `Início ${formatDate(version.startDate)} • ${end}`;
 
     info.append(name, details);
 
@@ -1447,7 +1495,7 @@ function buildRecurringRow(item) {
     value.className = "item-value " +
         (item.type === "income" ? "green" : "red");
     value.textContent =
-        `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+        `${item.type === "income" ? "+" : "-"} ${money(version.amount)}`;
 
     const editBtn = document.createElement("button");
     editBtn.className = "outline-button";
@@ -1484,11 +1532,14 @@ function editRecurringFromMenu(item) {
         return;
     }
 
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    const currentVersion = getVersionForDate(item, monthStart)
+        || item.versions[item.versions.length - 1];
+
     const valorStr = prompt(
-        `Valor (R$). Atual: ${money(item.amount)}\n\n` +
-        `Se você alterar o valor, o valor anterior será encerrado no mês anterior ao atual, ` +
-        `e o novo valor passará a valer a partir do mês atual.`,
-        item.amount
+        `Valor (R$). Atual neste mês: ${money(currentVersion.amount)}\n\n` +
+        `Digite o novo valor:`,
+        currentVersion.amount
     );
     if (valorStr === null) return;
 
@@ -1498,95 +1549,87 @@ function editRecurringFromMenu(item) {
         return;
     }
 
-    const inicioStr = prompt("Data início (AAAA-MM-DD):", item.startDate);
-    if (inicioStr === null) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicioStr)) {
-        alert("Data início inválida.");
-        return;
-    }
-
-    const temFim = confirm(
-        "Este lançamento tem data fim?\n\nOK = Sim (informar data fim)\nCancelar = Não (sem data fim)"
-    );
-
-    let fim = null;
-
-    if (temFim) {
-        const fimStr = prompt("Data fim (AAAA-MM-DD):", item.endDate || "");
-        if (fimStr === null) return;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(fimStr)) {
-            alert("Data fim inválida.");
-            return;
-        }
-        fim = fimStr;
-    }
-
     const roundedValue = Math.round(valor * 100) / 100;
     const description = descricao.trim();
-    const valueChanged = roundedValue !== item.amount;
-    const startChanged = inicioStr !== item.startDate;
-    const endChanged = (fim || null) !== (item.endDate || null);
 
-    if (valueChanged && !startChanged) {
-        const currentMonth = new Date();
-        const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 12);
-        const currentMonthStartStr = localDate(currentMonthStart);
+    const valueChanged = roundedValue !== currentVersion.amount;
 
-        const previousMonthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 0, 12);
+    if (valueChanged) {
+        const defaultStart = localDate(monthStart);
+
+        const startStr = prompt(
+            `A partir de qual mês o novo valor passa a valer?\n\n` +
+            `Formato: AAAA-MM-DD (dia será o 1º do mês)\n` +
+            `O valor anterior será encerrado no mês imediatamente anterior.`,
+            defaultStart
+        );
+
+        if (startStr === null) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
+            alert("Data inválida.");
+            return;
+        }
+
+        const changeDate = parseDate(startStr);
+        const changeMonthStart = new Date(changeDate.getFullYear(), changeDate.getMonth(), 1, 12);
+        const changeMonthStartStr = localDate(changeMonthStart);
+
+        const previousMonthEnd = new Date(
+            changeMonthStart.getFullYear(),
+            changeMonthStart.getMonth(),
+            0,
+            12
+        );
         const previousMonthEndStr = localDate(previousMonthEnd);
 
-        const originalStart = parseDate(item.startDate);
+        const sorted = [...item.versions].sort((a, b) =>
+            a.startDate.localeCompare(b.startDate)
+        );
 
-        if (originalStart < currentMonthStart) {
-            const oldRecord = {
-                ...item,
-                id: makeId(),
-                description: description,
-                endDate: previousMonthEndStr,
-                hasEndDate: true
-            };
+        const affectedVersion = sorted.find(v => {
+            const vStart = v.startDate;
+            const vEnd = v.endDate || "9999-12-31";
+            return changeMonthStartStr >= vStart && changeMonthStartStr <= vEnd;
+        });
 
-            const newRecord = {
-                ...item,
-                id: makeId(),
-                description: description,
-                amount: roundedValue,
-                startDate: currentMonthStartStr,
-                endDate: fim,
-                hasEndDate: temFim,
-                dayOfMonth: parseDate(currentMonthStartStr).getDate()
-            };
-
-            recurring = recurring.filter(x => x.id !== item.id);
-            recurring.push(oldRecord, newRecord);
-        } else {
-            const index = recurring.findIndex(x => x.id === item.id);
-            if (index !== -1) {
-                recurring[index] = {
-                    ...recurring[index],
-                    description: description,
-                    amount: roundedValue,
-                    startDate: inicioStr,
-                    endDate: fim,
-                    hasEndDate: temFim,
-                    dayOfMonth: parseDate(inicioStr).getDate()
-                };
+        if (!affectedVersion) {
+            const laterVersion = sorted.find(v => v.startDate > changeMonthStartStr);
+            if (laterVersion) {
+                alert("Já existe uma alteração de valor posterior a esta data. Edite a versão correta.");
+                return;
             }
-        }
-    } else {
-        const index = recurring.findIndex(x => x.id === item.id);
-        if (index !== -1) {
-            recurring[index] = {
-                ...recurring[index],
-                description: description,
+
+            item.versions.push({
                 amount: roundedValue,
-                startDate: inicioStr,
-                endDate: fim,
-                hasEndDate: temFim,
-                dayOfMonth: parseDate(inicioStr).getDate()
+                startDate: changeMonthStartStr,
+                endDate: null
+            });
+        } else {
+            const wasOpen = !affectedVersion.endDate;
+
+            affectedVersion.endDate = previousMonthEndStr;
+
+            const newVersion = {
+                amount: roundedValue,
+                startDate: changeMonthStartStr,
+                endDate: wasOpen ? null : affectedVersion.endDate
             };
+
+            if (!wasOpen) {
+                const originalEnd = affectedVersion.endDate;
+                affectedVersion.endDate = previousMonthEndStr;
+                newVersion.endDate = originalEnd;
+            } else {
+                newVersion.endDate = null;
+            }
+
+            item.versions.push(newVersion);
+
+            item.versions.sort((a, b) => a.startDate.localeCompare(b.startDate));
         }
     }
+
+    item.description = description;
 
     saveData();
     updateDashboard();
@@ -1611,7 +1654,6 @@ $("openRecurringForm").addEventListener("click", () => {
         12
     );
     $("recurringStart").value = localDate(startOfMonth);
-    $("recurringEnd").min = localDate(startOfMonth);
 
     $("recurringHasEnd").checked = false;
     $("recurringEndContainer").classList.add("hidden");
@@ -1659,13 +1701,16 @@ $("recurringForm").addEventListener("submit", event => {
     recurring.push({
         id: makeId(),
         description,
-        amount: Math.round(amount * 100) / 100,
         type,
-        startDate,
-        endDate,
-        hasEndDate: hasEnd,
+        frequency,
         dayOfMonth: parseDate(startDate).getDate(),
-        frequency
+        versions: [
+            {
+                amount: Math.round(amount * 100) / 100,
+                startDate,
+                endDate
+            }
+        ]
     });
 
     saveData();
@@ -1802,12 +1847,20 @@ function confirmSelectedDeletion() {
 
         if (deleteRecurring) {
             recurring = recurring.filter(item => {
-                const itemStart = item.startDate;
-                const itemEnd = item.endDate || "9999-12-31";
+                const firstVersion = [...item.versions].sort((a, b) =>
+                    a.startDate.localeCompare(b.startDate)
+                )[0];
+
+                const itemStart = firstVersion.startDate;
+                const lastVersionEnd = [...item.versions]
+                    .map(v => v.endDate || "9999-12-31")
+                    .sort()
+                    .pop();
+
                 const monthStart = `${monthPrefix}01`;
                 const monthEnd = `${monthPrefix}31`;
 
-                const overlaps = !(itemEnd < monthStart || itemStart > monthEnd);
+                const overlaps = !(lastVersionEnd < monthStart || itemStart > monthEnd);
 
                 if (!overlaps) return true;
 
@@ -1875,7 +1928,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 7,
+        version: 8,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
