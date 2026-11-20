@@ -66,9 +66,8 @@ function makeId() {
 
 function getDataSnapshot() {
     return {
-        version: 6,
+        version: 7,
         transactions,
-        recurring,
         initialBalances,
         invoiceSettings
     };
@@ -76,7 +75,7 @@ function getDataSnapshot() {
 
 function getRecurringSnapshot() {
     return {
-        version: 1,
+        version: 2,
         recurring
     };
 }
@@ -87,39 +86,27 @@ function applyDataSnapshot(data) {
         type: item.type === "expense" ? "debit" : item.type
     }));
 
-    recurring = (data.recurring || []).map(item => ({
-        ...item,
-        type: item.type === "expense" ? "debit" : item.type
-    }));
-
-    if (Array.isArray(data.plans) && data.plans.length > 0) {
-        data.plans.forEach(plan => {
-            if (plan.repeat === "once") {
-                transactions.push({
-                    id: plan.id || makeId(),
-                    description: plan.description,
-                    amount: plan.amount,
-                    type: plan.type === "expense" ? "debit" : plan.type,
-                    date: plan.date
-                });
-            } else {
-                recurring.push({
-                    id: plan.id || makeId(),
-                    description: plan.description,
-                    amount: plan.amount,
-                    type: plan.type === "expense" ? "debit" : plan.type,
-                    startDate: plan.date,
-                    endDate: null,
-                    hasEndDate: false,
-                    dayOfMonth: parseDate(plan.date).getDate(),
-                    frequency: plan.repeat === "yearly" ? "yearly" : "monthly"
-                });
-            }
-        });
-    }
-
     initialBalances = data.initialBalances || {};
     invoiceSettings = data.invoiceSettings || {};
+
+    if (Array.isArray(data.recurring)) {
+        recurring = data.recurring.map(item => ({
+            ...item,
+            type: item.type === "expense" ? "debit" : item.type
+        }));
+    } else if (Array.isArray(data.plans)) {
+        recurring = data.plans.map(plan => ({
+            id: plan.id || makeId(),
+            description: plan.description,
+            amount: plan.amount,
+            type: plan.type === "expense" ? "debit" : plan.type,
+            startDate: plan.date,
+            endDate: plan.repeat === "once" ? plan.date : null,
+            hasEndDate: plan.repeat === "once",
+            dayOfMonth: parseDate(plan.date).getDate(),
+            frequency: plan.repeat === "yearly" ? "yearly" : "monthly"
+        }));
+    }
 }
 
 function applyRecurringSnapshot(data) {
@@ -133,7 +120,10 @@ function applyRecurringSnapshot(data) {
 
 function saveData() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(getDataSnapshot()));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            ...getDataSnapshot(),
+            recurring
+        }));
     } catch (error) {
         alert("Não foi possível salvar os dados localmente. Exporte um backup.");
     }
@@ -158,6 +148,13 @@ function loadData() {
         }
 
         applyDataSnapshot(data);
+
+        if (Array.isArray(data.recurring)) {
+            recurring = data.recurring.map(item => ({
+                ...item,
+                type: item.type === "expense" ? "debit" : item.type
+            }));
+        }
 
     } catch (error) {
         alert("Erro ao carregar os dados salvos.");
@@ -354,7 +351,10 @@ async function loadFromDrive() {
             applyRecurringSnapshot(data);
         }
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(getDataSnapshot()));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            ...getDataSnapshot(),
+            recurring
+        }));
 
         setCloudStatus("Drive: dados carregados");
         updateDashboard();
@@ -421,13 +421,7 @@ async function saveToDrive() {
 
         const folderId = await findOrCreateFolder();
 
-        const financeiroBody = JSON.stringify({
-            version: 6,
-            transactions,
-            initialBalances,
-            invoiceSettings
-        }, null, 2);
-
+        const financeiroBody = JSON.stringify(getDataSnapshot(), null, 2);
         const recurringBody = JSON.stringify(getRecurringSnapshot(), null, 2);
 
         currentFileId = await uploadOrUpdateFile(
@@ -566,52 +560,52 @@ function saveInitialBalance() {
 }
 
 // ==========================================
-// LANÇAMENTOS RECORRENTES (novo modelo)
+// LANÇAMENTOS RECORRENTES
 // ==========================================
 
-function getOccurrencesForMonth(date) {
+function recurringIsActiveInMonth(item, date) {
     const year = date.getFullYear();
     const month = date.getMonth();
 
-    const first = new Date(year, month, 1, 12);
-    const last = new Date(year, month + 1, 0, 12);
+    const start = parseDate(item.startDate);
 
-    const occurrences = [];
+    if (item.frequency === "yearly") {
+        if (year < start.getFullYear()) return null;
+        if (month !== start.getMonth()) return null;
 
-    recurring.forEach(item => {
-        const start = parseDate(item.startDate);
-
-        if (item.frequency === "yearly") {
-            if (year < start.getFullYear()) return;
-
-            if (month !== start.getMonth()) return;
-
-            const day = Math.min(
-                item.dayOfMonth || start.getDate(),
-                last.getDate()
-            );
-            const occurrence = localDate(
-                new Date(year, month, day, 12)
-            );
-
-            if (occurrence < item.startDate) return;
-            if (item.endDate && occurrence > item.endDate) return;
-
-            occurrences.push({ ...item, occurrenceDate: occurrence });
-            return;
-        }
-
-        if (first < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
-            return;
-        }
-
+        const last = new Date(year, month + 1, 0, 12);
         const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
         const occurrence = localDate(new Date(year, month, day, 12));
 
-        if (occurrence < item.startDate) return;
-        if (item.endDate && occurrence > item.endDate) return;
+        if (occurrence < item.startDate) return null;
+        if (item.endDate && occurrence > item.endDate) return null;
 
-        occurrences.push({ ...item, occurrenceDate: occurrence });
+        return occurrence;
+    }
+
+    const first = new Date(year, month, 1, 12);
+    if (first < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
+        return null;
+    }
+
+    const last = new Date(year, month + 1, 0, 12);
+    const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
+    const occurrence = localDate(new Date(year, month, day, 12));
+
+    if (occurrence < item.startDate) return null;
+    if (item.endDate && occurrence > item.endDate) return null;
+
+    return occurrence;
+}
+
+function getOccurrencesForMonth(date) {
+    const occurrences = [];
+
+    recurring.forEach(item => {
+        const occurrence = recurringIsActiveInMonth(item, date);
+        if (occurrence) {
+            occurrences.push({ ...item, occurrenceDate: occurrence });
+        }
     });
 
     return occurrences;
@@ -1056,7 +1050,7 @@ function openDayTransactionsModal(date, type) {
 
             value.addEventListener("click", () => {
                 if (item.occurrenceDate) {
-                    editRecurring(item);
+                    openRecurringMenu();
                 } else {
                     editTransaction(item);
                 }
@@ -1069,7 +1063,7 @@ function openDayTransactionsModal(date, type) {
 
             remove.addEventListener("click", () => {
                 if (item.occurrenceDate) {
-                    if (!confirm(`Excluir o lançamento recorrente "${item.description}"? Todas as ocorrências serão removidas.`)) return;
+                    if (!confirm(`Este é um lançamento recorrente. Excluir a série inteira "${item.description}"?`)) return;
                     recurring = recurring.filter(x => x.id !== item.id);
                 } else if (item.installmentGroupId) {
                     if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
@@ -1169,36 +1163,6 @@ function editTransaction(item) {
         const index = transactions.findIndex(x => x.id === item.id);
         if (index !== -1) {
             transactions[index].amount = Math.round(novoValor * 100) / 100;
-        }
-        saveData();
-        updateDashboard();
-        closeDayModal();
-    } else if (novoValorStr.trim() !== "") {
-        alert("Valor inválido.");
-    }
-}
-
-// ==========================================
-// EDIÇÃO DE RECORRENTE
-// ==========================================
-
-function editRecurring(item) {
-    const novoValorStr = prompt(
-        `Editar valor de "${item.description}".\n\n` +
-        `Este é um lançamento recorrente. Alterar o valor aqui afetará todas as ocorrências (passadas, presente e futuras).\n\n` +
-        `Valor atual: ${money(item.amount)}\n\n` +
-        `Digite o novo valor (ou deixe em branco para manter):`,
-        item.amount
-    );
-
-    if (novoValorStr === null) return;
-
-    const novoValor = parseFloat(novoValorStr.replace(",", "."));
-
-    if (!isNaN(novoValor) && novoValor > 0) {
-        const index = recurring.findIndex(x => x.id === item.id);
-        if (index !== -1) {
-            recurring[index].amount = Math.round(novoValor * 100) / 100;
         }
         saveData();
         updateDashboard();
@@ -1415,75 +1379,106 @@ function closeRecurringMenu() {
 }
 
 function renderRecurringList() {
-    const container = $("recurringList");
-    container.innerHTML = "";
+    const incomesContainer = $("recurringIncomeList");
+    const expensesContainer = $("recurringExpenseList");
 
-    if (!recurring.length) {
+    incomesContainer.innerHTML = "";
+    expensesContainer.innerHTML = "";
+
+    const incomes = recurring.filter(item => item.type === "income");
+    const expenses = recurring.filter(item => item.type !== "income");
+
+    if (incomes.length === 0) {
         const empty = document.createElement("p");
         empty.className = "empty-message";
-        empty.textContent = "Nenhum lançamento recorrente cadastrado.";
-        container.appendChild(empty);
-        return;
+        empty.textContent = "Nenhuma entrada recorrente cadastrada.";
+        incomesContainer.appendChild(empty);
+    } else {
+        incomes.forEach(item => {
+            incomesContainer.appendChild(buildRecurringRow(item));
+        });
     }
 
-    recurring.forEach(item => {
-        const row = document.createElement("div");
-        row.className = "planning-item";
-
-        const info = document.createElement("div");
-        info.className = "item-info";
-
-        const name = document.createElement("strong");
-        name.textContent = item.description;
-
-        const details = document.createElement("small");
-        const end = item.endDate
-            ? `até ${formatDate(item.endDate)}`
-            : "sem data fim";
-        details.textContent = `Início ${formatDate(item.startDate)} • ${end}`;
-
-        info.append(name, details);
-
-        const actions = document.createElement("div");
-        actions.className = "item-actions";
-
-        const value = document.createElement("span");
-        value.className = "item-value " +
-            (item.type === "income" ? "green" : "red");
-        value.textContent =
-            `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
-
-        const editBtn = document.createElement("button");
-        editBtn.className = "outline-button";
-        editBtn.textContent = "Editar";
-        editBtn.addEventListener("click", () => {
-            editRecurringFromMenu(item);
+    if (expenses.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty-message";
+        empty.textContent = "Nenhuma saída recorrente cadastrada.";
+        expensesContainer.appendChild(empty);
+    } else {
+        expenses.forEach(item => {
+            expensesContainer.appendChild(buildRecurringRow(item));
         });
+    }
+}
 
-        const remove = document.createElement("button");
-        remove.className = "delete-button";
-        remove.textContent = "✕";
-        remove.title = "Excluir lançamento recorrente";
+function buildRecurringRow(item) {
+    const row = document.createElement("div");
+    row.className = "planning-item";
 
-        remove.addEventListener("click", () => {
-            if (!confirm(`Excluir o lançamento recorrente "${item.description}"?`)) return;
-            recurring = recurring.filter(x => x.id !== item.id);
-            saveData();
-            updateDashboard();
-            renderRecurringList();
-        });
+    const info = document.createElement("div");
+    info.className = "item-info";
 
-        actions.append(value, editBtn, remove);
-        row.append(info, actions);
-        container.appendChild(row);
+    const name = document.createElement("strong");
+    name.textContent = item.description;
+
+    const details = document.createElement("small");
+    const end = item.endDate
+        ? `até ${formatDate(item.endDate)}`
+        : "sem data fim";
+    details.textContent = `Início ${formatDate(item.startDate)} • ${end}`;
+
+    info.append(name, details);
+
+    const actions = document.createElement("div");
+    actions.className = "item-actions";
+
+    const value = document.createElement("span");
+    value.className = "item-value " +
+        (item.type === "income" ? "green" : "red");
+    value.textContent =
+        `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "outline-button";
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", () => {
+        editRecurringFromMenu(item);
     });
+
+    const remove = document.createElement("button");
+    remove.className = "delete-button";
+    remove.textContent = "✕";
+    remove.title = "Excluir lançamento recorrente";
+
+    remove.addEventListener("click", () => {
+        if (!confirm(`Excluir o lançamento recorrente "${item.description}"?`)) return;
+        recurring = recurring.filter(x => x.id !== item.id);
+        saveData();
+        updateDashboard();
+        renderRecurringList();
+    });
+
+    actions.append(value, editBtn, remove);
+    row.append(info, actions);
+
+    return row;
 }
 
 function editRecurringFromMenu(item) {
     const descricao = prompt("Descrição:", item.description);
     if (descricao === null) return;
 
-    const valorStr = prompt("Valor (R$):", item.amount);
+    if (!descricao.trim()) {
+        alert("Descrição não pode ficar em branco.");
+        return;
+    }
+
+    const valorStr = prompt(
+        `Valor (R$). Atual: ${money(item.amount)}\n\n` +
+        `Se você alterar o valor, o valor anterior será encerrado no mês anterior ao atual, ` +
+        `e o novo valor passará a valer a partir do mês atual.`,
+        item.amount
+    );
     if (valorStr === null) return;
 
     const valor = parseFloat(valorStr.replace(",", "."));
@@ -1492,14 +1487,16 @@ function editRecurringFromMenu(item) {
         return;
     }
 
-    const inicio = prompt("Data início (AAAA-MM-DD):", item.startDate);
-    if (inicio === null) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) {
+    const inicioStr = prompt("Data início (AAAA-MM-DD):", item.startDate);
+    if (inicioStr === null) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicioStr)) {
         alert("Data início inválida.");
         return;
     }
 
-    const temFim = confirm("Este lançamento tem data fim?\n\nOK = Sim (informar data fim)\nCancelar = Não (sem data fim)");
+    const temFim = confirm(
+        "Este lançamento tem data fim?\n\nOK = Sim (informar data fim)\nCancelar = Não (sem data fim)"
+    );
 
     let fim = null;
 
@@ -1513,17 +1510,71 @@ function editRecurringFromMenu(item) {
         fim = fimStr;
     }
 
-    const index = recurring.findIndex(x => x.id === item.id);
-    if (index !== -1) {
-        recurring[index] = {
-            ...recurring[index],
-            description: descricao.trim() || item.description,
-            amount: Math.round(valor * 100) / 100,
-            startDate: inicio,
-            endDate: fim,
-            hasEndDate: temFim,
-            dayOfMonth: parseDate(inicio).getDate()
-        };
+    const roundedValue = Math.round(valor * 100) / 100;
+    const description = descricao.trim();
+    const valueChanged = roundedValue !== item.amount;
+    const startChanged = inicioStr !== item.startDate;
+    const endChanged = (fim || null) !== (item.endDate || null);
+
+    if (valueChanged && !startChanged) {
+        const currentMonth = new Date();
+        const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 12);
+        const currentMonthStartStr = localDate(currentMonthStart);
+
+        const previousMonthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 0, 12);
+        const previousMonthEndStr = localDate(previousMonthEnd);
+
+        const originalStart = parseDate(item.startDate);
+
+        if (originalStart < currentMonthStart) {
+            const oldRecord = {
+                ...item,
+                id: makeId(),
+                description: description,
+                endDate: previousMonthEndStr,
+                hasEndDate: true
+            };
+
+            const newRecord = {
+                ...item,
+                id: makeId(),
+                description: description,
+                amount: roundedValue,
+                startDate: currentMonthStartStr,
+                endDate: fim,
+                hasEndDate: temFim,
+                dayOfMonth: parseDate(currentMonthStartStr).getDate()
+            };
+
+            recurring = recurring.filter(x => x.id !== item.id);
+            recurring.push(oldRecord, newRecord);
+        } else {
+            const index = recurring.findIndex(x => x.id === item.id);
+            if (index !== -1) {
+                recurring[index] = {
+                    ...recurring[index],
+                    description: description,
+                    amount: roundedValue,
+                    startDate: inicioStr,
+                    endDate: fim,
+                    hasEndDate: temFim,
+                    dayOfMonth: parseDate(inicioStr).getDate()
+                };
+            }
+        }
+    } else {
+        const index = recurring.findIndex(x => x.id === item.id);
+        if (index !== -1) {
+            recurring[index] = {
+                ...recurring[index],
+                description: description,
+                amount: roundedValue,
+                startDate: inicioStr,
+                endDate: fim,
+                hasEndDate: temFim,
+                dayOfMonth: parseDate(inicioStr).getDate()
+            };
+        }
     }
 
     saveData();
@@ -1783,9 +1834,10 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 6,
+        version: 7,
         exportedAt: new Date().toISOString(),
-        ...getDataSnapshot()
+        ...getDataSnapshot(),
+        recurring
     };
 
     const blob = new Blob(
@@ -1830,6 +1882,13 @@ $("importFile").addEventListener("change", async event => {
 
         applyDataSnapshot(data);
 
+        if (Array.isArray(data.recurring)) {
+            recurring = data.recurring.map(item => ({
+                ...item,
+                type: item.type === "expense" ? "debit" : item.type
+            }));
+        }
+
         saveData();
         updateDashboard();
 
@@ -1858,7 +1917,6 @@ $("syncNowButton").addEventListener("click", async () => {
 
 loadData();
 
-$("planDate") && ($("planDate").value = localDate(new Date()));
 $("recurringStart") && ($("recurringStart").value = localDate(new Date()));
 
 updateDashboard();
