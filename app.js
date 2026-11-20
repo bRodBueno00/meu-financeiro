@@ -60,13 +60,21 @@ function makeId() {
         : String(Date.now()) + Math.random();
 }
 
+function suggestedDateInSelectedMonth() {
+    const today = new Date();
+    const day = today.getDate();
+    const lastDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+    const safeDay = Math.min(day, lastDay);
+    return localDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), safeDay, 12));
+}
+
 // ==========================================
 // PERSISTÊNCIA LOCAL + DRIVE
 // ==========================================
 
 function getDataSnapshot() {
     return {
-        version: 8,
+        version: 9,
         transactions,
         initialBalances,
         invoiceSettings
@@ -75,7 +83,7 @@ function getDataSnapshot() {
 
 function getRecurringSnapshot() {
     return {
-        version: 3,
+        version: 4,
         recurring
     };
 }
@@ -593,8 +601,6 @@ function recurringIsActiveInMonth(item, date) {
     const month = date.getMonth();
 
     if (!item.versions || !item.versions.length) return null;
-
-    const firstOfMonth = localDate(new Date(year, month, 1, 12));
 
     const firstVersionStart = [...item.versions]
         .map(v => v.startDate)
@@ -1555,23 +1561,12 @@ function editRecurringFromMenu(item) {
     const valueChanged = roundedValue !== currentVersion.amount;
 
     if (valueChanged) {
-        const defaultStart = localDate(monthStart);
-
-        const startStr = prompt(
-            `A partir de qual mês o novo valor passa a valer?\n\n` +
-            `Formato: AAAA-MM-DD (dia será o 1º do mês)\n` +
-            `O valor anterior será encerrado no mês imediatamente anterior.`,
-            defaultStart
+        const changeMonthStart = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            1,
+            12
         );
-
-        if (startStr === null) return;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
-            alert("Data inválida.");
-            return;
-        }
-
-        const changeDate = parseDate(startStr);
-        const changeMonthStart = new Date(changeDate.getFullYear(), changeDate.getMonth(), 1, 12);
         const changeMonthStartStr = localDate(changeMonthStart);
 
         const previousMonthEnd = new Date(
@@ -1606,22 +1601,15 @@ function editRecurringFromMenu(item) {
             });
         } else {
             const wasOpen = !affectedVersion.endDate;
+            const originalEnd = affectedVersion.endDate;
 
             affectedVersion.endDate = previousMonthEndStr;
 
             const newVersion = {
                 amount: roundedValue,
                 startDate: changeMonthStartStr,
-                endDate: wasOpen ? null : affectedVersion.endDate
+                endDate: wasOpen ? null : originalEnd
             };
-
-            if (!wasOpen) {
-                const originalEnd = affectedVersion.endDate;
-                affectedVersion.endDate = previousMonthEndStr;
-                newVersion.endDate = originalEnd;
-            } else {
-                newVersion.endDate = null;
-            }
 
             item.versions.push(newVersion);
 
@@ -1647,13 +1635,7 @@ $("openRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.remove("hidden");
     $("recurringForm").reset();
 
-    const startOfMonth = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth(),
-        1,
-        12
-    );
-    $("recurringStart").value = localDate(startOfMonth);
+    $("recurringStart").value = suggestedDateInSelectedMonth();
 
     $("recurringHasEnd").checked = false;
     $("recurringEndContainer").classList.add("hidden");
@@ -1718,13 +1700,7 @@ $("recurringForm").addEventListener("submit", event => {
 
     $("recurringForm").reset();
 
-    const startOfMonth = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth(),
-        1,
-        12
-    );
-    $("recurringStart").value = localDate(startOfMonth);
+    $("recurringStart").value = suggestedDateInSelectedMonth();
 
     $("recurringHasEnd").checked = false;
     $("recurringEndContainer").classList.add("hidden");
@@ -1928,7 +1904,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 8,
+        version: 9,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
