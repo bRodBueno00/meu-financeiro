@@ -271,6 +271,33 @@
         </div>
     </div>
 
+    <div id="recurringEditModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <h3>Editar lançamento recorrente</h3>
+            <p class="helper" id="recurringEditCurrentMonthLabel"></p>
+
+            <form id="recurringEditForm">
+                <label for="recurringEditDescription">Descrição</label>
+                <input id="recurringEditDescription" type="text" required>
+
+                <label for="recurringEditAmount">Novo valor (R$)</label>
+                <input id="recurringEditAmount" type="number" min="0.01" step="0.01" required>
+
+                <p class="helper" id="recurringEditExplanation"></p>
+
+                <div class="form-buttons">
+                    <button type="submit" class="primary-button">
+                        Salvar alteração
+                    </button>
+                    <button type="button" class="cancel-button" id="closeRecurringEditModal">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="deleteOptionsModal" class="modal-overlay hidden"
          role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
         <div class="modal-card">
