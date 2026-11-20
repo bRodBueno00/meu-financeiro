@@ -1385,13 +1385,24 @@ function renderRecurringList() {
     incomesContainer.innerHTML = "";
     expensesContainer.innerHTML = "";
 
-    const incomes = recurring.filter(item => item.type === "income");
-    const expenses = recurring.filter(item => item.type !== "income");
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
+
+    $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
+
+    const activeItems = recurring.filter(item =>
+        recurringIsActiveInMonth(item, selectedDate)
+    );
+
+    const incomes = activeItems.filter(item => item.type === "income");
+    const expenses = activeItems.filter(item => item.type !== "income");
 
     if (incomes.length === 0) {
         const empty = document.createElement("p");
         empty.className = "empty-message";
-        empty.textContent = "Nenhuma entrada recorrente cadastrada.";
+        empty.textContent = "Nenhuma entrada recorrente válida para este mês.";
         incomesContainer.appendChild(empty);
     } else {
         incomes.forEach(item => {
@@ -1402,7 +1413,7 @@ function renderRecurringList() {
     if (expenses.length === 0) {
         const empty = document.createElement("p");
         empty.className = "empty-message";
-        empty.textContent = "Nenhuma saída recorrente cadastrada.";
+        empty.textContent = "Nenhuma saída recorrente válida para este mês.";
         expensesContainer.appendChild(empty);
     } else {
         expenses.forEach(item => {
@@ -1588,10 +1599,20 @@ function editRecurringFromMenu(item) {
 
 $("openRecurringMenu").addEventListener("click", openRecurringMenu);
 $("closeRecurringMenu").addEventListener("click", closeRecurringMenu);
+
 $("openRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.remove("hidden");
     $("recurringForm").reset();
-    $("recurringStart").value = localDate(new Date());
+
+    const startOfMonth = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        1,
+        12
+    );
+    $("recurringStart").value = localDate(startOfMonth);
+    $("recurringEnd").min = localDate(startOfMonth);
+
     $("recurringHasEnd").checked = false;
     $("recurringEndContainer").classList.add("hidden");
 });
@@ -1651,7 +1672,15 @@ $("recurringForm").addEventListener("submit", event => {
     updateDashboard();
 
     $("recurringForm").reset();
-    $("recurringStart").value = localDate(new Date());
+
+    const startOfMonth = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        1,
+        12
+    );
+    $("recurringStart").value = localDate(startOfMonth);
+
     $("recurringHasEnd").checked = false;
     $("recurringEndContainer").classList.add("hidden");
     $("recurringFormContainer").classList.add("hidden");
@@ -1670,6 +1699,10 @@ $("prevMonth").addEventListener("click", () => {
         12
     );
     updateDashboard();
+
+    if (!$("recurringMenu").classList.contains("hidden")) {
+        renderRecurringList();
+    }
 });
 
 $("nextMonth").addEventListener("click", () => {
@@ -1680,12 +1713,20 @@ $("nextMonth").addEventListener("click", () => {
         12
     );
     updateDashboard();
+
+    if (!$("recurringMenu").classList.contains("hidden")) {
+        renderRecurringList();
+    }
 });
 
 $("goToCurrentMonth").addEventListener("click", () => {
     const now = new Date();
     selectedDate = new Date(now.getFullYear(), now.getMonth(), 1, 12);
     updateDashboard();
+
+    if (!$("recurringMenu").classList.contains("hidden")) {
+        renderRecurringList();
+    }
 });
 
 // ==========================================
@@ -1916,8 +1957,6 @@ $("syncNowButton").addEventListener("click", async () => {
 // ==========================================
 
 loadData();
-
-$("recurringStart") && ($("recurringStart").value = localDate(new Date()));
 
 updateDashboard();
 updateCloudButtons();
