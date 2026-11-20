@@ -77,7 +77,7 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 13,
+        version: 14,
         transactions,
         initialBalances,
         invoiceSettings,
@@ -603,16 +603,6 @@ function getVersionForDate(item, date) {
 
 function getOverrideKey(itemId, date) {
     return `${itemId}|${monthKey(date)}`;
-}
-
-function getEffectiveAmountForMonth(item, date) {
-    const version = getVersionForDate(item, date);
-    if (!version) return null;
-
-    const overrideKey = getOverrideKey(item.id, date);
-    const override = recurringMonthOverrides[overrideKey];
-
-    return override !== undefined ? override : version.amount;
 }
 
 function recurringIsActiveInMonth(item, date) {
@@ -1752,22 +1742,10 @@ $("openRecurringForm").addEventListener("click", () => {
     $("recurringForm").reset();
 
     $("recurringStart").value = suggestedDateInSelectedMonth();
-
-    $("recurringHasEnd").checked = false;
-    $("recurringEndContainer").classList.add("hidden");
 });
 
 $("closeRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.add("hidden");
-});
-
-$("recurringHasEnd").addEventListener("change", () => {
-    if ($("recurringHasEnd").checked) {
-        $("recurringEndContainer").classList.remove("hidden");
-    } else {
-        $("recurringEndContainer").classList.add("hidden");
-        $("recurringEnd").value = "";
-    }
 });
 
 $("recurringForm").addEventListener("submit", event => {
@@ -1777,22 +1755,10 @@ $("recurringForm").addEventListener("submit", event => {
     const amount = Number($("recurringAmount").value);
     const type = $("recurringType").value;
     const startDate = $("recurringStart").value;
-    const hasEnd = $("recurringHasEnd").checked;
-    const endDate = hasEnd ? $("recurringEnd").value : null;
     const frequency = $("recurringFrequency").value;
 
     if (!description || !Number.isFinite(amount) || amount <= 0 || !startDate) {
         alert("Preencha os dados corretamente.");
-        return;
-    }
-
-    if (hasEnd && !endDate) {
-        alert("Informe a data fim.");
-        return;
-    }
-
-    if (hasEnd && endDate < startDate) {
-        alert("A data fim deve ser maior ou igual à data início.");
         return;
     }
 
@@ -1806,7 +1772,7 @@ $("recurringForm").addEventListener("submit", event => {
             {
                 amount: Math.round(amount * 100) / 100,
                 startDate,
-                endDate
+                endDate: null
             }
         ]
     });
@@ -1818,8 +1784,6 @@ $("recurringForm").addEventListener("submit", event => {
 
     $("recurringStart").value = suggestedDateInSelectedMonth();
 
-    $("recurringHasEnd").checked = false;
-    $("recurringEndContainer").classList.add("hidden");
     $("recurringFormContainer").classList.add("hidden");
     renderRecurringList();
 });
@@ -2027,7 +1991,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 13,
+        version: 14,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
