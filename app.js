@@ -60,13 +60,18 @@ function makeId() {
         : String(Date.now()) + Math.random();
 }
 
+function currentMonthStart() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1, 12);
+}
+
 // ==========================================
 // PERSISTÊNCIA LOCAL + DRIVE
 // ==========================================
 
 function getDataSnapshot() {
     return {
-        version: 4,
+        version: 5,
         transactions,
         plans,
         initialBalances,
@@ -74,6 +79,116 @@ function getDataSnapshot() {
         skippedOccurrences,
         planOverrides
     };
+}
+
+function migratePlansToMaterialized() {
+    const cutoff = currentMonthStart();
+    const cutoffDate = localDate(cutoff);
+
+    plans.forEach(plan => {
+        if (!plan.date) return;
+
+        const start = parseDate(plan.date);
+
+        if (plan.repeat === "once") {
+            if (plan.date < cutoffDate) {
+                const already = transactions.some(t =>
+                    t.sourcePlanId === plan.id &&
+                    t.sourceOccurrenceDate === plan.date
+                );
+
+                if (!already) {
+                    const overriddenAmount = planOverrides[`${plan.id}|${monthKey(start)}`];
+                    transactions.push({
+                        id: makeId(),
+                        description: plan.description,
+                        amount: overriddenAmount !== undefined ? overriddenAmount : plan.amount,
+                        type: plan.type,
+                        date: plan.date,
+                        sourcePlanId: plan.id,
+                        sourceOccurrenceDate: plan.date
+                    });
+                }
+            }
+            return;
+        }
+
+        if (plan.repeat === "monthly" || plan.repeat === "yearly") {
+            const endExclusive = new Date(cutoff.getFullYear(), cutoff.getMonth(), 1, 12);
+
+            let cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+            if (plan.repeat === "yearly") {
+                cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+            }
+
+            let guard = 0;
+            while (cursor < endExclusive && guard < 480) {
+                guard++;
+
+                if (plan.repeat === "yearly" && cursor.getMonth() !== start.getMonth()) {
+                    cursor = new Date(cursor.getFullYear() + 1, start.getMonth(), 1, 12);
+                    continue;
+                }
+
+                const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+                const day = Math.min(start.getDate(), lastDay);
+                const occurrence = localDate(new Date(cursor.getFullYear(), cursor.getMonth(), day, 12));
+
+                if (occurrence >= plan.date && occurrence < cutoffDate) {
+                    const exclusion = `${plan.id}|${occurrence}`;
+                    const already = transactions.some(t =>
+                        t.sourcePlanId === plan.id &&
+                        t.sourceOccurrenceDate === occurrence
+                    );
+
+                    if (!already && !skippedOccurrences.includes(exclusion)) {
+                        const overriddenAmount = planOverrides[`${plan.id}|${monthKey(parseDate(occurrence))}`];
+                        transactions.push({
+                            id: makeId(),
+                            description: plan.description,
+                            amount: overriddenAmount !== undefined ? overriddenAmount : plan.amount,
+                            type: plan.type,
+                            date: occurrence,
+                            sourcePlanId: plan.id,
+                            sourceOccurrenceDate: occurrence
+                        });
+                    }
+                }
+
+                if (plan.repeat === "monthly") {
+                    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12);
+                } else {
+                    cursor = new Date(cursor.getFullYear() + 1, cursor.getMonth(), 1, 12);
+                }
+            }
+        }
+    });
+
+    const cutoffMonthKey = monthKey(cutoff);
+
+    Object.keys(planOverrides).forEach(k => {
+        const parts = k.split("|");
+        if (parts.length === 2 && parts[1] < cutoffMonthKey) {
+            delete planOverrides[k];
+        }
+    });
+
+    plans.forEach(plan => {
+        if (plan.date < cutoffDate) {
+            if (plan.repeat === "once") {
+                plan._materializedPast = true;
+            } else {
+                plan.date = cutoffDate;
+            }
+        }
+    });
+
+    plans = plans.filter(plan => !(plan.repeat === "once" && plan._materializedPast));
+
+    skippedOccurrences = skippedOccurrences.filter(key => {
+        const [, occurrence] = key.split("|");
+        return occurrence >= cutoffDate;
+    });
 }
 
 function applyDataSnapshot(data) {
@@ -93,6 +208,10 @@ function applyDataSnapshot(data) {
         ? data.skippedOccurrences
         : [];
     planOverrides = data.planOverrides || {};
+
+    if (!data.version || data.version < 5) {
+        migratePlansToMaterialized();
+    }
 }
 
 function saveData() {
@@ -504,6 +623,14 @@ function saveInitialBalance() {
 // ==========================================
 
 function getOccurrencesForMonth(date) {
+    const cutoffMonth = currentMonthStart();
+    const cutoffKey = monthKey(cutoffMonth);
+    const targetKey = monthKey(date);
+
+    if (targetKey < cutoffKey) {
+        return [];
+    }
+
     const year = date.getFullYear();
     const month = date.getMonth();
 
@@ -555,9 +682,7 @@ function getOccurrencesForMonth(date) {
             !skippedOccurrences.includes(`${item.id}|${item.occurrenceDate}`)
         )
         .map(item => {
-            const monthKeyStr = monthKey(date);
-            const overrideKey = `${item.id}|${monthKeyStr}`;
-            
+            const overrideKey = `${item.id}|${targetKey}`;
             if (planOverrides[overrideKey] !== undefined) {
                 return { ...item, amount: planOverrides[overrideKey] };
             }
@@ -1220,19 +1345,36 @@ function editPlanValue(plan) {
 
     openScopeModal(
         "Aplicar novo valor",
-        `Novo valor: ${money(roundedValue)}\n\nMarque a opção abaixo se deseja aplicar também aos meses futuros. Caso contrário, o novo valor será aplicado somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.`,
+        `Novo valor: ${money(roundedValue)}\n\nMarque a opção abaixo se deseja aplicar também aos meses futuros. Caso contrário, o novo valor será aplicado somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
         (includeFuture) => {
             if (includeFuture) {
-                plan.amount = roundedValue;
+                const planStart = parseDate(plan.date);
+                const currentMonth = currentMonthStart();
+                const planStartKey = monthKey(planStart);
+                const currentKey = monthKey(currentMonth);
 
-                const currentMonthKey = monthKey(selectedDate);
-                const keysToRemove = Object.keys(planOverrides).filter(k => {
-                    if (!k.startsWith(`${plan.id}|`)) return false;
-                    const overrideMonthKey = k.split("|")[1];
-                    return overrideMonthKey >= currentMonthKey;
+                if (planStartKey >= currentKey) {
+                    plan.amount = roundedValue;
+
+                    const keysToRemove = Object.keys(planOverrides).filter(k => {
+                        if (!k.startsWith(`${plan.id}|`)) return false;
+                        const overrideMonthKey = k.split("|")[1];
+                        return overrideMonthKey >= currentKey;
+                    });
+
+                    keysToRemove.forEach(k => delete planOverrides[k]);
+                } else {
+                    planOverrides[key] = roundedValue;
+                }
+
+                const futurePlanTransactions = transactions.filter(t =>
+                    t.sourcePlanId === plan.id &&
+                    t.date >= localDate(currentMonth)
+                );
+
+                futurePlanTransactions.forEach(t => {
+                    t.amount = roundedValue;
                 });
-
-                keysToRemove.forEach(k => delete planOverrides[k]);
             } else {
                 planOverrides[key] = roundedValue;
             }
@@ -1268,14 +1410,27 @@ function deletePlanOccurrence(item, fromDayModal) {
         "Excluir programação",
         `Você está excluindo "${item.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
         (includeFuture) => {
-            if (includeFuture) {
-                plans = plans.filter(x => x.id !== item.id);
+            const currentMonth = currentMonthStart();
+            const currentMonthDate = localDate(currentMonth);
 
-                const currentMonthKey = monthKey(selectedDate);
+            if (includeFuture) {
+                const planTransactionsFuture = transactions.filter(t =>
+                    t.sourcePlanId === item.id &&
+                    t.date >= currentMonthDate
+                );
+
+                transactions = transactions.filter(t =>
+                    !(t.sourcePlanId === item.id && t.date >= currentMonthDate)
+                );
+
+                if (planTransactionsFuture.length === 0 || true) {
+                    plans = plans.filter(x => x.id !== item.id);
+                }
+
                 const keysToRemove = Object.keys(planOverrides).filter(k => {
                     if (!k.startsWith(`${item.id}|`)) return false;
                     const overrideMonthKey = k.split("|")[1];
-                    return overrideMonthKey >= currentMonthKey;
+                    return overrideMonthKey >= monthKey(currentMonth);
                 });
 
                 keysToRemove.forEach(k => delete planOverrides[k]);
@@ -1436,6 +1591,9 @@ function renderTransactions(items) {
             if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
                 detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
             }
+            if (item.sourcePlanId) {
+                detailText += " • Programação";
+            }
             details.textContent = detailText;
 
             info.append(name, details);
@@ -1572,14 +1730,20 @@ function renderPlans() {
                 "Excluir programação",
                 `Você está excluindo "${plan.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
                 (includeFuture) => {
+                    const currentMonth = currentMonthStart();
+                    const currentMonthDate = localDate(currentMonth);
+
                     if (includeFuture) {
+                        transactions = transactions.filter(t =>
+                            !(t.sourcePlanId === plan.id && t.date >= currentMonthDate)
+                        );
+
                         plans = plans.filter(x => x.id !== plan.id);
 
-                        const currentMonthKey = monthKey(selectedDate);
                         const keysToRemove = Object.keys(planOverrides).filter(k => {
                             if (!k.startsWith(`${plan.id}|`)) return false;
                             const overrideMonthKey = k.split("|")[1];
-                            return overrideMonthKey >= currentMonthKey;
+                            return overrideMonthKey >= monthKey(currentMonth);
                         });
 
                         keysToRemove.forEach(k => delete planOverrides[k]);
@@ -1832,7 +1996,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 4,
+        version: 5,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot()
     };
@@ -1931,6 +2095,10 @@ $("syncNowButton").addEventListener("click", async () => {
 // ==========================================
 
 loadData();
+
+if (transactions.some(t => t.sourcePlanId) || plans.length) {
+    migratePlansToMaterialized();
+}
 
 $("planDate").value = localDate(new Date());
 
