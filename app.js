@@ -77,7 +77,7 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 12,
+        version: 13,
         transactions,
         initialBalances,
         invoiceSettings,
@@ -605,6 +605,16 @@ function getOverrideKey(itemId, date) {
     return `${itemId}|${monthKey(date)}`;
 }
 
+function getEffectiveAmountForMonth(item, date) {
+    const version = getVersionForDate(item, date);
+    if (!version) return null;
+
+    const overrideKey = getOverrideKey(item.id, date);
+    const override = recurringMonthOverrides[overrideKey];
+
+    return override !== undefined ? override : version.amount;
+}
+
 function recurringIsActiveInMonth(item, date) {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -650,7 +660,12 @@ function recurringIsActiveInMonth(item, date) {
         ? override
         : version.amount;
 
-    return { occurrence, version, amount: effectiveAmount, hasOverride: override !== undefined };
+    return {
+        occurrence,
+        version,
+        amount: effectiveAmount,
+        hasOverride: override !== undefined
+    };
 }
 
 function getOccurrencesForMonth(date) {
@@ -2012,7 +2027,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 12,
+        version: 13,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
