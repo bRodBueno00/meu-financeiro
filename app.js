@@ -77,7 +77,7 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 15,
+        version: 16,
         transactions,
         initialBalances,
         invoiceSettings,
@@ -1096,9 +1096,12 @@ function openDayTransactionsModal(date, type) {
             name.textContent = item.description || labels[item.type];
 
             const details = document.createElement("small");
-            details.textContent = item.occurrenceDate
-                ? `${labels[item.type]} • Recorrente`
-                : labels[item.type];
+
+            if (item.occurrenceDate) {
+                details.textContent = `${labels[item.type]} • Recorrente`;
+            } else {
+                details.textContent = labels[item.type];
+            }
 
             info.append(name, details);
 
@@ -1122,31 +1125,33 @@ function openDayTransactionsModal(date, type) {
                 });
             }
 
-            const remove = document.createElement("button");
-            remove.className = "delete-button";
-            remove.textContent = "✕";
-            remove.title = "Excluir lançamento";
+            actions.append(value);
 
-            remove.addEventListener("click", () => {
-                if (item.occurrenceDate) {
-                    if (!confirm(`Este é um lançamento recorrente. Excluir a série inteira "${item.description}"?`)) return;
-                    recurring = recurring.filter(x => x.id !== item.id);
-                } else if (item.installmentGroupId) {
-                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
-                        return;
+            if (!item.occurrenceDate) {
+                const remove = document.createElement("button");
+                remove.className = "delete-button";
+                remove.textContent = "✕";
+                remove.title = "Excluir lançamento";
+
+                remove.addEventListener("click", () => {
+                    if (item.installmentGroupId) {
+                        if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
+                            return;
+                        }
+                        transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
+                    } else {
+                        if (!confirm("Excluir este lançamento?")) return;
+                        transactions = transactions.filter(x => x.id !== item.id);
                     }
-                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
-                } else {
-                    if (!confirm("Excluir este lançamento?")) return;
-                    transactions = transactions.filter(x => x.id !== item.id);
-                }
 
-                saveData();
-                updateDashboard();
-                closeDayModal();
-            });
+                    saveData();
+                    updateDashboard();
+                    closeDayModal();
+                });
 
-            actions.append(value, remove);
+                actions.append(remove);
+            }
+
             row.append(info, actions);
             list.appendChild(row);
         });
@@ -1991,7 +1996,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 15,
+        version: 16,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
