@@ -1153,6 +1153,45 @@ function editTransaction(item) {
 }
 
 // ==========================================
+// MODAL DE ESCOPO (MÊS ATUAL OU FUTURO)
+// ==========================================
+
+let scopeModalCallback = null;
+
+function openScopeModal(title, description, callback) {
+    scopeModalCallback = callback;
+
+    $("scopeModalTitle").textContent = title;
+    $("scopeModalDescription").textContent = description;
+    $("scopeFutureCheckbox").checked = false;
+
+    $("scopeModal").classList.remove("hidden");
+}
+
+function closeScopeModal() {
+    $("scopeModal").classList.add("hidden");
+    scopeModalCallback = null;
+}
+
+function confirmScopeModal() {
+    const includeFuture = $("scopeFutureCheckbox").checked;
+    const callback = scopeModalCallback;
+
+    closeScopeModal();
+
+    if (callback) {
+        callback(includeFuture);
+    }
+}
+
+$("confirmScopeButton").addEventListener("click", confirmScopeModal);
+$("cancelScopeButton").addEventListener("click", closeScopeModal);
+
+$("scopeModal").addEventListener("click", event => {
+    if (event.target === $("scopeModal")) closeScopeModal();
+});
+
+// ==========================================
 // EDIÇÃO DE PROGRAMAÇÃO (MÊS ATUAL OU FUTURO)
 // ==========================================
 
@@ -1179,36 +1218,29 @@ function editPlanValue(plan) {
 
     const roundedValue = Math.round(novoValor * 100) / 100;
 
-    const escolha = prompt(
-        `Onde aplicar o novo valor de ${money(roundedValue)}?\n\n` +
-        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
-        `2 - Este mês e ocorrências futuras\n\n` +
-        `Digite 1 ou 2:`,
-        "1"
+    openScopeModal(
+        "Aplicar novo valor",
+        `Novo valor: ${money(roundedValue)}\n\nMarque a opção abaixo se deseja aplicar também aos meses futuros. Caso contrário, o novo valor será aplicado somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.`,
+        (includeFuture) => {
+            if (includeFuture) {
+                plan.amount = roundedValue;
+
+                const currentMonthKey = monthKey(selectedDate);
+                const keysToRemove = Object.keys(planOverrides).filter(k => {
+                    if (!k.startsWith(`${plan.id}|`)) return false;
+                    const overrideMonthKey = k.split("|")[1];
+                    return overrideMonthKey >= currentMonthKey;
+                });
+
+                keysToRemove.forEach(k => delete planOverrides[k]);
+            } else {
+                planOverrides[key] = roundedValue;
+            }
+
+            saveData();
+            updateDashboard();
+        }
     );
-
-    if (escolha === null) return;
-
-    if (escolha.trim() === "1") {
-        planOverrides[key] = roundedValue;
-    } else if (escolha.trim() === "2") {
-        plan.amount = roundedValue;
-
-        const currentMonthKey = monthKey(selectedDate);
-        const keysToRemove = Object.keys(planOverrides).filter(k => {
-            if (!k.startsWith(`${plan.id}|`)) return false;
-            const overrideMonthKey = k.split("|")[1];
-            return overrideMonthKey >= currentMonthKey;
-        });
-
-        keysToRemove.forEach(k => delete planOverrides[k]);
-    } else {
-        alert("Opção inválida.");
-        return;
-    }
-
-    saveData();
-    updateDashboard();
 }
 
 // ==========================================
@@ -1232,40 +1264,33 @@ function deletePlanOccurrence(item, fromDayModal) {
         return;
     }
 
-    const escolha = prompt(
-        `Excluir "${item.description}".\n\n` +
-        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
-        `2 - Este mês e ocorrências futuras\n\n` +
-        `Digite 1 ou 2:`,
-        "1"
-    );
+    openScopeModal(
+        "Excluir programação",
+        `Você está excluindo "${item.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
+        (includeFuture) => {
+            if (includeFuture) {
+                plans = plans.filter(x => x.id !== item.id);
 
-    if (escolha === null) return;
+                const currentMonthKey = monthKey(selectedDate);
+                const keysToRemove = Object.keys(planOverrides).filter(k => {
+                    if (!k.startsWith(`${item.id}|`)) return false;
+                    const overrideMonthKey = k.split("|")[1];
+                    return overrideMonthKey >= currentMonthKey;
+                });
 
-    if (escolha.trim() === "1") {
-        const exclusion = `${item.id}|${item.occurrenceDate}`;
-        if (!skippedOccurrences.includes(exclusion)) {
-            skippedOccurrences.push(exclusion);
+                keysToRemove.forEach(k => delete planOverrides[k]);
+            } else {
+                const exclusion = `${item.id}|${item.occurrenceDate}`;
+                if (!skippedOccurrences.includes(exclusion)) {
+                    skippedOccurrences.push(exclusion);
+                }
+            }
+
+            saveData();
+            updateDashboard();
+            if (fromDayModal) closeDayModal();
         }
-    } else if (escolha.trim() === "2") {
-        plans = plans.filter(x => x.id !== item.id);
-
-        const currentMonthKey = monthKey(selectedDate);
-        const keysToRemove = Object.keys(planOverrides).filter(k => {
-            if (!k.startsWith(`${item.id}|`)) return false;
-            const overrideMonthKey = k.split("|")[1];
-            return overrideMonthKey >= currentMonthKey;
-        });
-
-        keysToRemove.forEach(k => delete planOverrides[k]);
-    } else {
-        alert("Opção inválida.");
-        return;
-    }
-
-    saveData();
-    updateDashboard();
-    if (fromDayModal) closeDayModal();
+    );
 }
 
 // ==========================================
@@ -1530,23 +1555,35 @@ function renderPlans() {
                 o => o.id === plan.id
             );
 
-            if (!currentOccurrence) {
-                if (plan.repeat === "once") {
-                    if (!confirm(`Excluir a programação "${plan.description}"?`)) return;
-                    plans = plans.filter(x => x.id !== plan.id);
-                } else {
-                    const escolha = prompt(
-                        `Excluir "${plan.description}".\n\n` +
-                        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
-                        `2 - Este mês e ocorrências futuras\n\n` +
-                        `Digite 1 ou 2:`,
-                        "1"
-                    );
+            if (currentOccurrence) {
+                deletePlanOccurrence(currentOccurrence, false);
+                return;
+            }
 
-                    if (escolha === null) return;
+            if (plan.repeat === "once") {
+                if (!confirm(`Excluir a programação "${plan.description}"?`)) return;
+                plans = plans.filter(x => x.id !== plan.id);
+                saveData();
+                updateDashboard();
+                return;
+            }
 
-                    if (escolha.trim() === "1") {
-                        const monthStr = monthKey(selectedDate);
+            openScopeModal(
+                "Excluir programação",
+                `Você está excluindo "${plan.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
+                (includeFuture) => {
+                    if (includeFuture) {
+                        plans = plans.filter(x => x.id !== plan.id);
+
+                        const currentMonthKey = monthKey(selectedDate);
+                        const keysToRemove = Object.keys(planOverrides).filter(k => {
+                            if (!k.startsWith(`${plan.id}|`)) return false;
+                            const overrideMonthKey = k.split("|")[1];
+                            return overrideMonthKey >= currentMonthKey;
+                        });
+
+                        keysToRemove.forEach(k => delete planOverrides[k]);
+                    } else {
                         const day = Math.min(
                             parseDate(plan.date).getDate(),
                             new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate()
@@ -1558,20 +1595,12 @@ function renderPlans() {
                         if (!skippedOccurrences.includes(exclusion)) {
                             skippedOccurrences.push(exclusion);
                         }
-                    } else if (escolha.trim() === "2") {
-                        plans = plans.filter(x => x.id !== plan.id);
-                    } else {
-                        alert("Opção inválida.");
-                        return;
                     }
+
+                    saveData();
+                    updateDashboard();
                 }
-
-                saveData();
-                updateDashboard();
-                return;
-            }
-
-            deletePlanOccurrence(currentOccurrence, false);
+            );
         });
 
         actions.append(value, remove);
