@@ -24,6 +24,9 @@ let invoiceSettings = {};
 let skippedOccurrences = [];
 let planOverrides = {};
 
+let pendingTransactionType = null;
+let pendingTransactionDate = null;
+
 const $ = id => document.getElementById(id);
 
 const money = value => Number(value || 0).toLocaleString("pt-BR", {
@@ -672,7 +675,6 @@ function getDayValues(date, actual, scheduled) {
 
 function getTodayBalance() {
     const today = new Date();
-    const todayStr = localDate(today);
 
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
@@ -1021,6 +1023,11 @@ function openDayTransactionsModal(date, type) {
                     if (!skippedOccurrences.includes(exclusion)) {
                         skippedOccurrences.push(exclusion);
                     }
+                } else if (item.installmentGroupId) {
+                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
+                        return;
+                    }
+                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
                 } else {
                     transactions = transactions.filter(x => x.id !== item.id);
                 }
@@ -1065,7 +1072,7 @@ function openDayTransactionsModal(date, type) {
 
     $("addDayTransactionButton").onclick = () => {
         closeDayModal();
-        addCalendarTransaction(type, date);
+        openTransactionForm(type, date);
     };
 
     modal.classList.remove("hidden");
@@ -1101,6 +1108,30 @@ function editPlanOccurrence(item) {
 }
 
 function editTransaction(item) {
+    if (item.installmentGroupId) {
+        const installmentInfo = item.installmentNumber && item.installmentTotal
+            ? ` (parcela ${item.installmentNumber}/${item.installmentTotal})`
+            : "";
+        const novoValorStr = prompt(
+            `Editar valor da parcela de "${item.description}"${installmentInfo}.\n\nDigite o novo valor desta parcela:`,
+            item.amount
+        );
+
+        if (novoValorStr === null) return;
+
+        const novoValor = parseFloat(novoValorStr.replace(",", "."));
+
+        if (!isNaN(novoValor) && novoValor > 0) {
+            item.amount = Math.round(novoValor * 100) / 100;
+            saveData();
+            updateDashboard();
+            closeDayModal();
+        } else if (novoValorStr.trim() !== "") {
+            alert("Valor inválido.");
+        }
+        return;
+    }
+
     const novoValorStr = prompt(
         `Editar valor de "${item.description}".\n\nDigite o novo valor (ou deixe em branco para manter):`,
         item.amount
@@ -1123,41 +1154,114 @@ function editTransaction(item) {
     }
 }
 
-function addCalendarTransaction(type, date) {
-    const labels = {
-        income: "Entrada",
-        credit: "Gasto no crédito",
-        debit: "Gasto no débito"
-    };
+// ==========================================
+// FORMULÁRIO DE NOVO LANÇAMENTO
+// ==========================================
 
-    const amountInput = prompt(
-        `${labels[type]} em ${formatDate(date)}\n\nDigite o valor em reais:`
-    );
+function openTransactionForm(type, date) {
+    pendingTransactionType = type;
+    pendingTransactionDate = date;
 
-    if (amountInput === null || amountInput.trim() === "") return;
+    const modal = $("transactionFormModal");
 
-    const amount = Number(amountInput.trim().replace(",", "."));
+    $("transactionFormTitle").textContent = "Novo lançamento";
+    $("transactionDescription").value = "";
+    $("transactionAmount").value = "";
+    $("transactionDate").value = date;
+    $("transactionType").value = type;
+    $("transactionInstallments").value = "1";
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-        alert("Digite um valor válido.");
+    updateInstallmentVisibility();
+
+    modal.classList.remove("hidden");
+}
+
+function closeTransactionForm() {
+    $("transactionFormModal").classList.add("hidden");
+    $("transactionForm").reset();
+    pendingTransactionType = null;
+    pendingTransactionDate = null;
+}
+
+function updateInstallmentVisibility() {
+    const type = $("transactionType").value;
+    const container = $("installmentContainer");
+
+    if (type === "credit") {
+        container.classList.remove("hidden");
+    } else {
+        container.classList.add("hidden");
+        $("transactionInstallments").value = "1";
+    }
+}
+
+$("transactionType").addEventListener("change", updateInstallmentVisibility);
+$("closeTransactionForm").addEventListener("click", closeTransactionForm);
+
+$("transactionForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const description = $("transactionDescription").value.trim();
+    const totalAmount = Number($("transactionAmount").value);
+    const type = $("transactionType").value;
+    const date = $("transactionDate").value;
+    const installments = type === "credit"
+        ? Number($("transactionInstallments").value)
+        : 1;
+
+    if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
+        alert("Preencha os dados corretamente.");
         return;
     }
 
-    const description = prompt("Descrição breve (opcional):");
+    if (type === "credit" && installments > 1) {
+        const baseDate = parseDate(date);
+        const installmentAmount = Math.round((totalAmount / installments) * 100) / 100;
+        const groupId = makeId();
 
-    if (description === null) return;
+        let accumulated = 0;
 
-    transactions.push({
-        id: makeId(),
-        description: description.trim() || labels[type],
-        amount: Math.round(amount * 100) / 100,
-        type,
-        date
-    });
+        for (let i = 0; i < installments; i++) {
+            const installmentDate = new Date(
+                baseDate.getFullYear(),
+                baseDate.getMonth() + i,
+                baseDate.getDate(),
+                12
+            );
+
+            const isLast = i === installments - 1;
+            const amount = isLast
+                ? Math.round((totalAmount - accumulated) * 100) / 100
+                : installmentAmount;
+
+            accumulated += amount;
+
+            transactions.push({
+                id: makeId(),
+                description: `${description} (${i + 1}/${installments})`,
+                amount,
+                type: "credit",
+                date: localDate(installmentDate),
+                installmentGroupId: groupId,
+                installmentNumber: i + 1,
+                installmentTotal: installments,
+                originalDescription: description
+            });
+        }
+    } else {
+        transactions.push({
+            id: makeId(),
+            description,
+            amount: Math.round(totalAmount * 100) / 100,
+            type,
+            date
+        });
+    }
 
     saveData();
     updateDashboard();
-}
+    closeTransactionForm();
+});
 
 // ==========================================
 // HISTÓRICO DE LANÇAMENTOS
@@ -1189,7 +1293,11 @@ function renderTransactions(items) {
             name.textContent = item.description;
 
             const details = document.createElement("small");
-            details.textContent = `${formatDate(item.date)} • ${labels[item.type]}`;
+            let detailText = `${formatDate(item.date)} • ${labels[item.type]}`;
+            if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
+                detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
+            }
+            details.textContent = detailText;
 
             info.append(name, details);
 
@@ -1218,9 +1326,15 @@ function renderTransactions(items) {
             remove.title = "Excluir lançamento";
 
             remove.addEventListener("click", () => {
-                if (!confirm("Excluir este lançamento?")) return;
-
-                transactions = transactions.filter(x => x.id !== item.id);
+                if (item.installmentGroupId) {
+                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
+                        return;
+                    }
+                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
+                } else {
+                    if (!confirm("Excluir este lançamento?")) return;
+                    transactions = transactions.filter(x => x.id !== item.id);
+                }
 
                 saveData();
                 updateDashboard();
@@ -1532,6 +1646,10 @@ $("closeDayModalButton").addEventListener("click", closeDayModal);
 
 $("dayTransactionsModal").addEventListener("click", event => {
     if (event.target === $("dayTransactionsModal")) closeDayModal();
+});
+
+$("transactionFormModal").addEventListener("click", event => {
+    if (event.target === $("transactionFormModal")) closeTransactionForm();
 });
 
 // ==========================================
