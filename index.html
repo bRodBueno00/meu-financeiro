@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101827">
+    <title>Meu Financeiro</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<header class="header">
+    <div>
+        <h1>Meu Financeiro</h1>
+        <p>Planejamento e controle financeiro</p>
+    </div>
+
+    <div class="month-selector">
+        <button id="prevMonth">‹</button>
+        <strong id="currentMonth"></strong>
+        <button id="nextMonth">›</button>
+    </div>
+    <button id="goToCurrentMonth" class="current-month-button" type="button">
+        Voltar para o mês atual
+    </button>
+
+    <div class="cloud-bar">
+        <span id="cloudStatus">Drive: desconectado</span>
+        <button id="googleLoginButton" class="cloud-button" type="button">Entrar com Google</button>
+        <button id="googleLogoutButton" class="cloud-button hidden" type="button">Sair</button>
+        <button id="syncNowButton" class="cloud-button hidden" type="button">Sincronizar agora</button>
+    </div>
+</header>
+
+<main>
+
+    <section class="balance-card">
+        <span>Saldo projetado do mês</span>
+        <h2 id="balance">R$ 0,00</h2>
+
+        <div class="balance-details">
+            <div>
+                <small>Entradas</small>
+                <strong id="totalIncome">R$ 0,00</strong>
+            </div>
+            <div>
+                <small>Saídas no débito</small>
+                <strong id="totalExpenses">R$ 0,00</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="summary">
+        <div class="summary-card">
+            <span>Entradas</span>
+            <strong class="green" id="received">R$ 0,00</strong>
+        </div>
+
+        <div class="summary-card">
+            <span>Crédito utilizado</span>
+            <strong class="blue" id="creditTotal">R$ 0,00</strong>
+        </div>
+
+        <div class="summary-card">
+            <span>Débito utilizado</span>
+            <strong class="red" id="debitTotal">R$ 0,00</strong>
+        </div>
+    </section>
+
+    <section class="section">
+        <h3>Configuração do saldo</h3>
+
+        <label for="initialBalance">Saldo inicial do mês (R$)</label>
+        <input id="initialBalance" type="number" step="0.01" placeholder="0,00">
+
+        <p class="helper" id="initialBalanceInfo">
+            O saldo inicial será preenchido automaticamente com o saldo final do mês anterior.
+        </p>
+
+        <button id="saveInitialBalance" class="primary-button">
+            Salvar saldo inicial
+        </button>
+    </section>
+
+    <section class="section">
+        <h3>Fatura do cartão</h3>
+
+        <div class="invoice-highlight">
+            <div>
+                <small>Fatura do mês</small>
+                <strong id="invoiceAmount">R$ 0,00</strong>
+            </div>
+            <div>
+                <small>Vencimento</small>
+                <strong id="invoiceDue">20/--/----</strong>
+            </div>
+        </div>
+
+        <div class="invoice-settings">
+            <h4>Parametrizar período da fatura</h4>
+
+            <label for="invoiceStart">Dia inicial do ciclo (mês anterior)</label>
+            <input id="invoiceStart" type="number" min="1" max="31">
+
+            <label for="invoiceEnd">Dia final do ciclo (mês atual)</label>
+            <input id="invoiceEnd" type="number" min="1" max="31">
+
+            <label for="invoiceDueDay">Dia de vencimento da fatura</label>
+            <input id="invoiceDueDay" type="number" min="1" max="31">
+
+            <button id="saveInvoiceSettings" class="primary-button">
+                Salvar configuração deste mês
+            </button>
+
+            <p class="helper">Configuração independente para cada mês.</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-title">
+            <h3>Calendário financeiro</h3>
+            <span>Toque nos valores para lançar</span>
+        </div>
+
+        <div class="calendar-wrapper">
+            <div class="calendar-header">
+                <span>Dia</span>
+                <span>Entrada</span>
+                <span>Crédito</span>
+                <span>Débito</span>
+                <span>Saldo</span>
+            </div>
+
+            <div id="dailyList"></div>
+        </div>
+
+        <div class="calendar-legend">
+            <span><i class="dot green-dot"></i> Entrada</span>
+            <span><i class="dot blue-dot"></i> Crédito</span>
+            <span><i class="dot red-dot"></i> Débito</span>
+        </div>
+
+        <p class="helper">
+            O botão de exclusão de cada dia remove somente os lançamentos manuais daquele dia. As programações recorrentes são preservadas.
+        </p>
+    </section>
+
+    <section class="section">
+        <div class="section-title">
+            <h3>Programações recorrentes</h3>
+            <button class="outline-button" id="openPlanning">+ Programar</button>
+        </div>
+
+        <p class="helper">
+            Cadastre recebimentos e pagamentos futuros, inclusive aqueles que se repetem mensalmente.
+        </p>
+
+        <div id="planningFormContainer" class="hidden">
+            <form id="planningForm">
+
+                <label for="planDescription">Descrição</label>
+                <input id="planDescription" type="text"
+                       placeholder="Ex: Salário, aluguel, internet" required>
+
+                <label for="planAmount">Valor (R$)</label>
+                <input id="planAmount" type="number" min="0.01" step="0.01" required>
+
+                <label for="planType">Tipo</label>
+                <select id="planType">
+                    <option value="income">Entrada</option>
+                    <option value="debit">Saída no débito</option>
+                </select>
+
+                <label for="planDate">Primeira data</label>
+                <input id="planDate" type="date" required>
+
+                <label for="planRepeat">Repetição</label>
+                <select id="planRepeat">
+                    <option value="once">Somente uma vez</option>
+                    <option value="monthly">Todo mês</option>
+                    <option value="yearly">Todo ano</option>
+                </select>
+
+                <div class="form-buttons">
+                    <button type="submit" class="primary-button">
+                        Salvar programação
+                    </button>
+                    <button type="button" class="cancel-button" id="closePlanning">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="planningList"></div>
+    </section>
+
+    <section class="section">
+        <div class="section-title">
+            <h3>Lançamentos do mês</h3>
+            <span id="transactionCount">0 registros</span>
+        </div>
+
+        <div id="transactionList"></div>
+
+        <p id="emptyMessage" class="empty-message">
+            Nenhum lançamento neste mês.
+        </p>
+    </section>
+
+    <section class="section backup-section">
+        <h3>Backup dos dados</h3>
+
+        <p class="helper">
+            Exporte seus registros e programações para um arquivo JSON.
+        </p>
+
+        <button id="exportButton" class="primary-button">
+            Exportar backup JSON
+        </button>
+
+        <label class="import-button">
+            Importar backup JSON
+            <input id="importFile" type="file" accept=".json">
+        </label>
+
+        <p id="backupMessage" class="backup-message"></p>
+    </section>
+
+    <section class="section reset-section">
+        <h3>Zerar aplicativo</h3>
+        <p class="helper">
+            Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste aparelho.
+        </p>
+
+        <button id="resetAppButton" class="danger-button" type="button">
+            Apagar todos os dados
+        </button>
+
+        <button id="resetMonthButton" class="danger-button secondary-danger" type="button">
+            Apagar todos os dados do mês
+        </button>
+    </section>
+
+    <div id="deleteOptionsModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <div class="modal-card">
+            <h3 id="deleteModalTitle">Confirmar exclusão</h3>
+            <p id="deleteModalDescription" class="helper"></p>
+            <p class="modal-instruction">Marque o que deseja apagar:</p>
+
+            <label class="checkbox-option">
+                <input id="deleteOneTimeCheckbox" type="checkbox" checked>
+                <span>Lançamentos pontuais</span>
+            </label>
+
+            <label class="checkbox-option">
+                <input id="deleteRecurringCheckbox" type="checkbox" checked>
+                <span>Lançamentos recorrentes</span>
+            </label>
+
+            <div class="modal-actions">
+                <button id="cancelDeleteButton" class="cancel-button" type="button">
+                    Cancelar
+                </button>
+                <button id="confirmDeleteButton" class="danger-button" type="button">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<footer>Meu Financeiro • Seus dados, seu controle</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
