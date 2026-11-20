@@ -22,6 +22,7 @@ let selectedDate = new Date();
 let initialBalances = {};
 let invoiceSettings = {};
 let skippedOccurrences = [];
+let planOverrides = {};
 
 const $ = id => document.getElementById(id);
 
@@ -64,10 +65,13 @@ function getDataSnapshot() {
     return {
         version: 4,
         transactions,
-        plans,
+        plans,        
         initialBalances,
         invoiceSettings,
-        skippedOccurrences
+        skippedOccurrences,
+        planOverrides
+    };
+}
     };
 }
 
@@ -87,6 +91,9 @@ function applyDataSnapshot(data) {
     skippedOccurrences = Array.isArray(data.skippedOccurrences)
         ? data.skippedOccurrences
         : [];
+        
+    planOverrides = data.planOverrides || {};
+}
 }
 
 function saveData() {
@@ -544,9 +551,19 @@ function getOccurrencesForMonth(date) {
         }
     });
 
-    return occurrences.filter(item =>
-        !skippedOccurrences.includes(`${item.id}|${item.occurrenceDate}`)
-    );
+    return occurrences
+        .filter(item =>
+            !skippedOccurrences.includes(`${item.id}|${item.occurrenceDate}`)
+        )
+        .map(item => {
+            const monthKeyStr = monthKey(date);
+            const overrideKey = `${item.id}|${monthKeyStr}`;
+            
+            if (planOverrides[overrideKey] !== undefined) {
+                return { ...item, amount: planOverrides[overrideKey] };
+            }
+            return item;
+        });
 }
 
 function getMonthlyOccurrences() {
@@ -1012,12 +1029,41 @@ function renderPlans() {
         const actions = document.createElement("div");
         actions.className = "item-actions";
 
+        const key = `${plan.id}|${monthKey(selectedDate)}`;
+        const isOverridden = planOverrides[key] !== undefined;
+        const displayAmount = isOverridden ? planOverrides[key] : plan.amount;
+
         const value = document.createElement("span");
         value.className = "item-value " +
             (plan.type === "income" ? "green" : "red");
+        
+        value.style.cursor = "pointer";
+        value.style.textDecoration = "underline dashed";
+        value.title = "Clique para editar o valor apenas para este mês";
 
         value.textContent =
-            `${plan.type === "income" ? "+" : "-"} ${money(plan.amount)}`;
+            `${plan.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
+
+        value.addEventListener("click", () => {
+            const msg = `Editar valor de "${plan.description}" para o mês de ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.\n\nDigite o novo valor (ou deixe em branco para restaurar o valor original):`;
+            const novoValorStr = prompt(msg, displayAmount);
+
+            if (novoValorStr === null) return;
+
+            const novoValor = parseFloat(novoValorStr.replace(",", "."));
+
+            if (novoValorStr.trim() === "") {
+                delete planOverrides[key];
+            } else if (!isNaN(novoValor) && novoValor > 0) {
+                planOverrides[key] = Math.round(novoValor * 100) / 100;
+            } else {
+                alert("Valor inválido.");
+                return;
+            }
+
+            saveData();
+            updateDashboard();
+        });
 
         const remove = document.createElement("button");
         remove.className = "delete-button";
@@ -1163,6 +1209,7 @@ function confirmSelectedDeletion() {
         if (deleteRecurring) {
             plans = [];
             skippedOccurrences = [];
+            planOverrides = {};
         }
 
         if (deleteOneTime && deleteRecurring) {
