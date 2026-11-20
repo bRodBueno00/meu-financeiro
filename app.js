@@ -89,7 +89,6 @@ function applyDataSnapshot(data) {
     skippedOccurrences = Array.isArray(data.skippedOccurrences)
         ? data.skippedOccurrences
         : [];
-        
     planOverrides = data.planOverrides || {};
 }
 
