@@ -674,13 +674,6 @@ function getTodayBalance() {
     const today = new Date();
     const todayStr = localDate(today);
 
-    const todayMonthKey = monthKey(today);
-    const selectedMonthKey = monthKey(selectedDate);
-
-    if (todayMonthKey !== selectedMonthKey) {
-        return null;
-    }
-
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
 
@@ -695,9 +688,20 @@ function getTodayBalance() {
 
     let balance = getOpeningBalance(selectedDate);
 
-    const todayDay = today.getDate();
+    const selectedKey = monthKey(selectedDate);
+    const todayKey = monthKey(today);
 
-    for (let day = 1; day <= todayDay; day++) {
+    let limitDay;
+
+    if (selectedKey < todayKey) {
+        limitDay = new Date(year, month + 1, 0).getDate();
+    } else if (selectedKey > todayKey) {
+        return 0;
+    } else {
+        limitDay = today.getDate();
+    }
+
+    for (let day = 1; day <= limitDay; day++) {
         const currentDay = localDate(new Date(year, month, day, 12));
         const values = getDayValues(currentDay, actual, scheduled);
 
@@ -756,10 +760,7 @@ function updateDashboard() {
     $("creditTotal").textContent = money(creditActual);
     $("debitTotal").textContent = money(debitActual);
 
-    const todayBalance = getTodayBalance();
-    $("todayBalance").textContent = todayBalance === null
-        ? "—"
-        : money(todayBalance);
+    $("todayBalance").textContent = money(getTodayBalance());
 
     $("currentMonth").textContent =
         selectedDate.toLocaleDateString("pt-BR", {
@@ -841,7 +842,8 @@ function renderDailyCalendar(actual, scheduled) {
             `Excluir lançamentos manuais do dia ${day}`
         );
 
-        deleteDay.addEventListener("click", () => {
+        deleteDay.addEventListener("click", (e) => {
+            e.stopPropagation();
             deleteDayTransactions(date);
         });
 
@@ -1109,7 +1111,10 @@ function editTransaction(item) {
     const novoValor = parseFloat(novoValorStr.replace(",", "."));
 
     if (!isNaN(novoValor) && novoValor > 0) {
-        item.amount = Math.round(novoValor * 100) / 100;
+        const index = transactions.findIndex(x => x.id === item.id);
+        if (index !== -1) {
+            transactions[index].amount = Math.round(novoValor * 100) / 100;
+        }
         saveData();
         updateDashboard();
         closeDayModal();
