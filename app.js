@@ -77,7 +77,7 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 14,
+        version: 15,
         transactions,
         initialBalances,
         invoiceSettings,
@@ -1991,7 +1991,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 14,
+        version: 15,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
