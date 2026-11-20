@@ -294,6 +294,69 @@
         </div>
     </div>
 
+    <div id="transactionFormModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true" aria-labelledby="transactionFormTitle">
+        <div class="modal-card">
+            <h3 id="transactionFormTitle">Novo lançamento</h3>
+            <form id="transactionForm">
+                <label for="transactionDescription">Descrição</label>
+                <input id="transactionDescription" type="text" placeholder="Ex: Compra, salário" required>
+
+                <label for="transactionAmount">Valor (R$)</label>
+                <input id="transactionAmount" type="number" min="0.01" step="0.01" required>
+
+                <label for="transactionType">Tipo</label>
+                <select id="transactionType">
+                    <option value="income">Entrada</option>
+                    <option value="credit">Crédito</option>
+                    <option value="debit">Débito</option>
+                </select>
+
+                <label for="transactionDate">Data</label>
+                <input id="transactionDate" type="date" required>
+
+                <div id="installmentContainer" class="hidden">
+                    <label for="transactionInstallments">Parcelas</label>
+                    <select id="transactionInstallments">
+                        <option value="1">1x (à vista)</option>
+                        <option value="2">2x</option>
+                        <option value="3">3x</option>
+                        <option value="4">4x</option>
+                        <option value="5">5x</option>
+                        <option value="6">6x</option>
+                        <option value="7">7x</option>
+                        <option value="8">8x</option>
+                        <option value="9">9x</option>
+                        <option value="10">10x</option>
+                        <option value="11">11x</option>
+                        <option value="12">12x</option>
+                        <option value="13">13x</option>
+                        <option value="14">14x</option>
+                        <option value="15">15x</option>
+                        <option value="16">16x</option>
+                        <option value="17">17x</option>
+                        <option value="18">18x</option>
+                        <option value="19">19x</option>
+                        <option value="20">20x</option>
+                        <option value="21">21x</option>
+                        <option value="22">22x</option>
+                        <option value="23">23x</option>
+                        <option value="24">24x</option>
+                    </select>
+                </div>
+
+                <div class="form-buttons">
+                    <button type="submit" class="primary-button">
+                        Salvar lançamento
+                    </button>
+                    <button type="button" class="cancel-button" id="closeTransactionForm">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </main>
 
 <footer>Meu Financeiro • Seus dados, seu controle</footer>
