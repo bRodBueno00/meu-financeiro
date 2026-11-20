@@ -65,13 +65,11 @@ function getDataSnapshot() {
     return {
         version: 4,
         transactions,
-        plans,        
+        plans,
         initialBalances,
         invoiceSettings,
         skippedOccurrences,
         planOverrides
-    };
-}
     };
 }
 
@@ -93,7 +91,6 @@ function applyDataSnapshot(data) {
         : [];
         
     planOverrides = data.planOverrides || {};
-}
 }
 
 function saveData() {
