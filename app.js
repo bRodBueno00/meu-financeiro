@@ -23,6 +23,7 @@ let selectedDate = new Date();
 
 let initialBalances = {};
 let invoiceSettings = {};
+let recurringMonthOverrides = {};
 
 let pendingTransactionType = null;
 let pendingTransactionDate = null;
@@ -76,16 +77,17 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 10,
+        version: 12,
         transactions,
         initialBalances,
-        invoiceSettings
+        invoiceSettings,
+        recurringMonthOverrides
     };
 }
 
 function getRecurringSnapshot() {
     return {
-        version: 4,
+        version: 5,
         recurring
     };
 }
@@ -98,6 +100,7 @@ function applyDataSnapshot(data) {
 
     initialBalances = data.initialBalances || {};
     invoiceSettings = data.invoiceSettings || {};
+    recurringMonthOverrides = data.recurringMonthOverrides || {};
 
     if (Array.isArray(data.recurring)) {
         recurring = data.recurring.map(item => ({
@@ -598,6 +601,10 @@ function getVersionForDate(item, date) {
     return chosen;
 }
 
+function getOverrideKey(itemId, date) {
+    return `${itemId}|${monthKey(date)}`;
+}
+
 function recurringIsActiveInMonth(item, date) {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -613,33 +620,37 @@ function recurringIsActiveInMonth(item, date) {
     const version = getVersionForDate(item, new Date(year, month, 1, 12));
     if (!version) return null;
 
+    let occurrence = null;
+
     if (item.frequency === "yearly") {
         if (year < start.getFullYear()) return null;
         if (month !== start.getMonth()) return null;
 
         const last = new Date(year, month + 1, 0, 12);
         const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
-        const occurrence = localDate(new Date(year, month, day, 12));
+        occurrence = localDate(new Date(year, month, day, 12));
+    } else {
+        const fm = new Date(year, month, 1, 12);
+        if (fm < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
+            return null;
+        }
 
-        if (occurrence < version.startDate) return null;
-        if (version.endDate && occurrence > version.endDate) return null;
-
-        return { occurrence, version };
+        const last = new Date(year, month + 1, 0, 12);
+        const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
+        occurrence = localDate(new Date(year, month, day, 12));
     }
-
-    const fm = new Date(year, month, 1, 12);
-    if (fm < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
-        return null;
-    }
-
-    const last = new Date(year, month + 1, 0, 12);
-    const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
-    const occurrence = localDate(new Date(year, month, day, 12));
 
     if (occurrence < version.startDate) return null;
     if (version.endDate && occurrence > version.endDate) return null;
 
-    return { occurrence, version };
+    const overrideKey = getOverrideKey(item.id, date);
+    const override = recurringMonthOverrides[overrideKey];
+
+    const effectiveAmount = override !== undefined
+        ? override
+        : version.amount;
+
+    return { occurrence, version, amount: effectiveAmount, hasOverride: override !== undefined };
 }
 
 function getOccurrencesForMonth(date) {
@@ -650,8 +661,9 @@ function getOccurrencesForMonth(date) {
         if (result) {
             occurrences.push({
                 ...item,
-                amount: result.version.amount,
-                occurrenceDate: result.occurrence
+                amount: result.amount,
+                occurrenceDate: result.occurrence,
+                hasOverride: result.hasOverride
             });
         }
     });
@@ -1096,13 +1108,14 @@ function openDayTransactionsModal(date, type) {
             value.textContent =
                 `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
 
-            value.addEventListener("click", () => {
-                if (item.occurrenceDate) {
-                    openRecurringMenu();
-                } else {
+            if (!item.occurrenceDate) {
+                value.style.cursor = "pointer";
+                value.style.textDecoration = "underline dashed";
+                value.title = "Clique para editar o valor";
+                value.addEventListener("click", () => {
                     editTransaction(item);
-                }
-            });
+                });
+            }
 
             const remove = document.createElement("button");
             remove.className = "delete-button";
@@ -1488,11 +1501,16 @@ function buildRecurringRow(item) {
 
     const version = getActiveVersionDisplay(item);
 
+    const activeResult = recurringIsActiveInMonth(item, selectedDate);
+    const displayAmount = activeResult ? activeResult.amount : version.amount;
+    const hasOverride = activeResult && activeResult.hasOverride;
+
     const details = document.createElement("small");
     const end = version.endDate
         ? `até ${formatDate(version.endDate)}`
         : "sem data fim";
-    details.textContent = `Início ${formatDate(version.startDate)} • ${end}`;
+    details.textContent = `Início ${formatDate(version.startDate)} • ${end}` +
+        (hasOverride ? " • Ajustado neste mês" : "");
 
     info.append(name, details);
 
@@ -1503,7 +1521,7 @@ function buildRecurringRow(item) {
     value.className = "item-value " +
         (item.type === "income" ? "green" : "red");
     value.textContent =
-        `${item.type === "income" ? "+" : "-"} ${money(version.amount)}`;
+        `${item.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
 
     const editBtn = document.createElement("button");
     editBtn.className = "outline-button";
@@ -1542,18 +1560,30 @@ function openRecurringEditModal(item) {
     const currentVersion = getVersionForDate(item, monthStart)
         || item.versions[item.versions.length - 1];
 
+    const overrideKey = getOverrideKey(item.id, selectedDate);
+    const hasOverride = recurringMonthOverrides[overrideKey] !== undefined;
+    const currentAmount = hasOverride
+        ? recurringMonthOverrides[overrideKey]
+        : currentVersion.amount;
+
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
 
     $("recurringEditDescription").value = item.description;
-    $("recurringEditAmount").value = currentVersion.amount;
+    $("recurringEditAmount").value = currentAmount;
     $("recurringEditCurrentMonthLabel").textContent =
         `Mês de edição: ${monthLabel}`;
+
     $("recurringEditExplanation").textContent =
-        `Se você alterar o valor, o novo valor passa a valer a partir de ${monthLabel}. ` +
-        `O valor anterior (${money(currentVersion.amount)}) será encerrado automaticamente no mês anterior.`;
+        `Valor base atual da recorrência: ${money(currentVersion.amount)}. ` +
+        `Se marcar a opção abaixo, o novo valor será aplicado somente em ${monthLabel}. ` +
+        `Caso contrário, passará a valer de ${monthLabel} em diante.`;
+
+    $("recurringEditOnlyThisMonth").checked = hasOverride;
+
+    $("recurringEditResetContainer").classList.toggle("hidden", !hasOverride);
 
     $("recurringEditModal").classList.remove("hidden");
 }
@@ -1567,6 +1597,23 @@ $("closeRecurringEditModal").addEventListener("click", closeRecurringEditModal);
 
 $("recurringEditModal").addEventListener("click", event => {
     if (event.target === $("recurringEditModal")) closeRecurringEditModal();
+});
+
+$("recurringEditResetButton").addEventListener("click", () => {
+    if (!editingRecurringId) return;
+
+    const overrideKey = getOverrideKey(editingRecurringId, selectedDate);
+
+    if (recurringMonthOverrides[overrideKey] === undefined) {
+        alert("Não há ajuste para remover neste mês.");
+        return;
+    }
+
+    delete recurringMonthOverrides[overrideKey];
+    saveData();
+    updateDashboard();
+    renderRecurringList();
+    closeRecurringEditModal();
 });
 
 $("recurringEditForm").addEventListener("submit", event => {
@@ -1594,14 +1641,23 @@ $("recurringEditForm").addEventListener("submit", event => {
     }
 
     const roundedValue = Math.round(amountValue * 100) / 100;
+    const onlyThisMonth = $("recurringEditOnlyThisMonth").checked;
 
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
     const currentVersion = getVersionForDate(item, monthStart)
         || item.versions[item.versions.length - 1];
 
-    const valueChanged = roundedValue !== currentVersion.amount;
+    item.description = description;
 
-    if (valueChanged) {
+    if (onlyThisMonth) {
+        const overrideKey = getOverrideKey(item.id, selectedDate);
+
+        if (roundedValue === currentVersion.amount) {
+            delete recurringMonthOverrides[overrideKey];
+        } else {
+            recurringMonthOverrides[overrideKey] = roundedValue;
+        }
+    } else {
         const changeMonthStartStr = localDate(monthStart);
 
         const previousMonthEnd = new Date(
@@ -1638,21 +1694,30 @@ $("recurringEditForm").addEventListener("submit", event => {
             const wasOpen = !affectedVersion.endDate;
             const originalEnd = affectedVersion.endDate;
 
-            affectedVersion.endDate = previousMonthEndStr;
+            if (roundedValue !== affectedVersion.amount) {
+                affectedVersion.endDate = previousMonthEndStr;
 
-            const newVersion = {
-                amount: roundedValue,
-                startDate: changeMonthStartStr,
-                endDate: wasOpen ? null : originalEnd
-            };
+                const newVersion = {
+                    amount: roundedValue,
+                    startDate: changeMonthStartStr,
+                    endDate: wasOpen ? null : originalEnd
+                };
 
-            item.versions.push(newVersion);
+                item.versions.push(newVersion);
 
-            item.versions.sort((a, b) => a.startDate.localeCompare(b.startDate));
+                item.versions.sort((a, b) => a.startDate.localeCompare(b.startDate));
+            }
         }
-    }
 
-    item.description = description;
+        const monthPrefix = monthKey(selectedDate);
+        Object.keys(recurringMonthOverrides).forEach(k => {
+            if (!k.startsWith(`${item.id}|`)) return;
+            const keyMonth = k.split("|")[1];
+            if (keyMonth >= monthPrefix) {
+                delete recurringMonthOverrides[k];
+            }
+        });
+    }
 
     saveData();
     updateDashboard();
@@ -1834,6 +1899,7 @@ function confirmSelectedDeletion() {
 
         if (deleteRecurring) {
             recurring = [];
+            recurringMonthOverrides = {};
         }
 
         if (deleteOneTime && deleteRecurring) {
@@ -1877,6 +1943,12 @@ function confirmSelectedDeletion() {
                 if (!overlaps) return true;
 
                 return false;
+            });
+
+            Object.keys(recurringMonthOverrides).forEach(k => {
+                if (k.split("|")[1] === key) {
+                    delete recurringMonthOverrides[k];
+                }
             });
         }
 
@@ -1940,7 +2012,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 10,
+        version: 12,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
