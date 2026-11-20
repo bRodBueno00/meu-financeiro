@@ -220,6 +220,7 @@
                 <form id="recurringForm" style="margin-top:16px">
                     <label for="recurringDescription">Descrição</label>
                     <input id="recurringDescription" type="text" placeholder="Ex: Salário, aluguel" required>
+                    <datalist id="recurringDescriptionList"></datalist>
 
                     <label for="recurringAmount">Valor (R$)</label>
                     <input id="recurringAmount" type="number" min="0.01" step="0.01" required>
@@ -270,6 +271,7 @@
             <form id="recurringEditForm">
                 <label for="recurringEditDescription">Descrição</label>
                 <input id="recurringEditDescription" type="text" required>
+                <datalist id="recurringEditDescriptionList"></datalist>
 
                 <label for="recurringEditAmount">Novo valor (R$)</label>
                 <input id="recurringEditAmount" type="number" min="0.01" step="0.01" required>
@@ -350,6 +352,7 @@
             <form id="transactionForm">
                 <label for="transactionDescription">Descrição</label>
                 <input id="transactionDescription" type="text" placeholder="Ex: Compra, salário" required>
+                <datalist id="transactionDescriptionList"></datalist>
 
                 <label for="transactionAmount">Valor (R$)</label>
                 <input id="transactionAmount" type="number" min="0.01" step="0.01" required>
