@@ -1155,6 +1155,65 @@ function editTransaction(item) {
 }
 
 // ==========================================
+// EDIÇÃO DE PROGRAMAÇÃO (MÊS ATUAL OU FUTURO)
+// ==========================================
+
+function editPlanValue(plan) {
+    const key = `${plan.id}|${monthKey(selectedDate)}`;
+    const isOverridden = planOverrides[key] !== undefined;
+    const currentAmount = isOverridden ? planOverrides[key] : plan.amount;
+
+    const novoValorStr = prompt(
+        `Editar valor de "${plan.description}".\n\n` +
+        `Valor atual: ${money(currentAmount)}\n\n` +
+        `Digite o novo valor:`,
+        currentAmount
+    );
+
+    if (novoValorStr === null) return;
+
+    const novoValor = parseFloat(novoValorStr.replace(",", "."));
+
+    if (isNaN(novoValor) || novoValor <= 0) {
+        alert("Valor inválido.");
+        return;
+    }
+
+    const roundedValue = Math.round(novoValor * 100) / 100;
+
+    const escolha = prompt(
+        `Onde aplicar o novo valor de ${money(roundedValue)}?\n\n` +
+        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
+        `2 - Este mês e ocorrências futuras\n\n` +
+        `Digite 1 ou 2:`,
+        "1"
+    );
+
+    if (escolha === null) return;
+
+    if (escolha.trim() === "1") {
+        planOverrides[key] = roundedValue;
+    } else if (escolha.trim() === "2") {
+        plan.amount = roundedValue;
+
+        const currentMonthKey = monthKey(selectedDate);
+        const keysToRemove = Object.keys(planOverrides).filter(k => {
+            if (!k.startsWith(`${plan.id}|`)) return false;
+            const overrideMonthKey = k.split("|")[1];
+            return overrideMonthKey >= currentMonthKey;
+        });
+
+        keysToRemove.forEach(k => delete planOverrides[k]);
+    } else {
+        alert("Opção inválida.");
+        return;
+    }
+
+    saveData();
+    updateDashboard();
+}
+
+// ==========================================
 // FORMULÁRIO DE NOVO LANÇAMENTO
 // ==========================================
 
@@ -1397,30 +1456,13 @@ function renderPlans() {
         
         value.style.cursor = "pointer";
         value.style.textDecoration = "underline dashed";
-        value.title = "Clique para editar o valor apenas para este mês";
+        value.title = "Clique para editar o valor";
 
         value.textContent =
             `${plan.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
 
         value.addEventListener("click", () => {
-            const msg = `Editar valor de "${plan.description}" para o mês de ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.\n\nDigite o novo valor (ou deixe em branco para restaurar o valor original):`;
-            const novoValorStr = prompt(msg, displayAmount);
-
-            if (novoValorStr === null) return;
-
-            const novoValor = parseFloat(novoValorStr.replace(",", "."));
-
-            if (novoValorStr.trim() === "") {
-                delete planOverrides[key];
-            } else if (!isNaN(novoValor) && novoValor > 0) {
-                planOverrides[key] = Math.round(novoValor * 100) / 100;
-            } else {
-                alert("Valor inválido.");
-                return;
-            }
-
-            saveData();
-            updateDashboard();
+            editPlanValue(plan);
         });
 
         const remove = document.createElement("button");
