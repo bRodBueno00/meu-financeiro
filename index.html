@@ -51,6 +51,10 @@
                 <small>Saídas no débito</small>
                 <strong id="totalExpenses">R$ 0,00</strong>
             </div>
+            <div>
+                <small>Saldo de hoje</small>
+                <strong id="todayBalance">R$ 0,00</strong>
+            </div>
         </div>
     </section>
 
@@ -269,6 +273,22 @@
                 </button>
                 <button id="confirmDeleteButton" class="danger-button" type="button">
                     OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dayTransactionsModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true" aria-labelledby="dayModalTitle">
+        <div class="modal-card">
+            <h3 id="dayModalTitle">Lançamentos do dia</h3>
+            <div id="dayTransactionsList"></div>
+            <div class="modal-actions">
+                <button id="addDayTransactionButton" class="primary-button" type="button">
+                    Adicionar lançamento
+                </button>
+                <button id="closeDayModalButton" class="cancel-button" type="button">
+                    Fechar
                 </button>
             </div>
         </div>
