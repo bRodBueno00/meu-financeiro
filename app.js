@@ -27,6 +27,8 @@ let invoiceSettings = {};
 let pendingTransactionType = null;
 let pendingTransactionDate = null;
 
+let editingRecurringId = null;
+
 const $ = id => document.getElementById(id);
 
 const money = value => Number(value || 0).toLocaleString("pt-BR", {
@@ -74,7 +76,7 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 9,
+        version: 10,
         transactions,
         initialBalances,
         invoiceSettings
@@ -1507,7 +1509,7 @@ function buildRecurringRow(item) {
     editBtn.className = "outline-button";
     editBtn.textContent = "Editar";
     editBtn.addEventListener("click", () => {
-        editRecurringFromMenu(item);
+        openRecurringEditModal(item);
     });
 
     const remove = document.createElement("button");
@@ -1529,49 +1531,82 @@ function buildRecurringRow(item) {
     return row;
 }
 
-function editRecurringFromMenu(item) {
-    const descricao = prompt("Descrição:", item.description);
-    if (descricao === null) return;
+// ==========================================
+// MODAL DE EDIÇÃO DE RECORRENTE
+// ==========================================
 
-    if (!descricao.trim()) {
-        alert("Descrição não pode ficar em branco.");
-        return;
-    }
+function openRecurringEditModal(item) {
+    editingRecurringId = item.id;
 
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
     const currentVersion = getVersionForDate(item, monthStart)
         || item.versions[item.versions.length - 1];
 
-    const valorStr = prompt(
-        `Valor (R$). Atual neste mês: ${money(currentVersion.amount)}\n\n` +
-        `Digite o novo valor:`,
-        currentVersion.amount
-    );
-    if (valorStr === null) return;
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
 
-    const valor = parseFloat(valorStr.replace(",", "."));
-    if (isNaN(valor) || valor <= 0) {
-        alert("Valor inválido.");
+    $("recurringEditDescription").value = item.description;
+    $("recurringEditAmount").value = currentVersion.amount;
+    $("recurringEditCurrentMonthLabel").textContent =
+        `Mês de edição: ${monthLabel}`;
+    $("recurringEditExplanation").textContent =
+        `Se você alterar o valor, o novo valor passa a valer a partir de ${monthLabel}. ` +
+        `O valor anterior (${money(currentVersion.amount)}) será encerrado automaticamente no mês anterior.`;
+
+    $("recurringEditModal").classList.remove("hidden");
+}
+
+function closeRecurringEditModal() {
+    $("recurringEditModal").classList.add("hidden");
+    editingRecurringId = null;
+}
+
+$("closeRecurringEditModal").addEventListener("click", closeRecurringEditModal);
+
+$("recurringEditModal").addEventListener("click", event => {
+    if (event.target === $("recurringEditModal")) closeRecurringEditModal();
+});
+
+$("recurringEditForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    if (!editingRecurringId) return;
+
+    const item = recurring.find(x => x.id === editingRecurringId);
+    if (!item) {
+        closeRecurringEditModal();
         return;
     }
 
-    const roundedValue = Math.round(valor * 100) / 100;
-    const description = descricao.trim();
+    const description = $("recurringEditDescription").value.trim();
+    const amountValue = Number($("recurringEditAmount").value);
+
+    if (!description) {
+        alert("Informe a descrição.");
+        return;
+    }
+
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        alert("Informe um valor válido.");
+        return;
+    }
+
+    const roundedValue = Math.round(amountValue * 100) / 100;
+
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    const currentVersion = getVersionForDate(item, monthStart)
+        || item.versions[item.versions.length - 1];
 
     const valueChanged = roundedValue !== currentVersion.amount;
 
     if (valueChanged) {
-        const changeMonthStart = new Date(
-            selectedDate.getFullYear(),
-            selectedDate.getMonth(),
-            1,
-            12
-        );
-        const changeMonthStartStr = localDate(changeMonthStart);
+        const changeMonthStartStr = localDate(monthStart);
 
         const previousMonthEnd = new Date(
-            changeMonthStart.getFullYear(),
-            changeMonthStart.getMonth(),
+            monthStart.getFullYear(),
+            monthStart.getMonth(),
             0,
             12
         );
@@ -1622,7 +1657,8 @@ function editRecurringFromMenu(item) {
     saveData();
     updateDashboard();
     renderRecurringList();
-}
+    closeRecurringEditModal();
+});
 
 // ==========================================
 // FORMULÁRIO DE NOVO RECORRENTE
@@ -1904,7 +1940,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 9,
+        version: 10,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
