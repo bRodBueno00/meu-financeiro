@@ -24,6 +24,7 @@ let selectedDate = new Date();
 let initialBalances = {};
 let invoiceSettings = {};
 let recurringMonthOverrides = {};
+let savedDescriptions = [];
 
 let pendingTransactionType = null;
 let pendingTransactionDate = null;
@@ -77,11 +78,12 @@ function suggestedDateInSelectedMonth() {
 
 function getDataSnapshot() {
     return {
-        version: 16,
+        version: 17,
         transactions,
         initialBalances,
         invoiceSettings,
-        recurringMonthOverrides
+        recurringMonthOverrides,
+        savedDescriptions
     };
 }
 
@@ -90,6 +92,43 @@ function getRecurringSnapshot() {
         version: 5,
         recurring
     };
+}
+
+function registerDescription(name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return;
+
+    const exists = savedDescriptions.some(
+        d => d.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (!exists) {
+        savedDescriptions.push(trimmed);
+        savedDescriptions.sort((a, b) =>
+            a.localeCompare(b, "pt-BR", { sensitivity: "base" })
+        );
+    }
+}
+
+function rebuildSavedDescriptions() {
+    const set = new Map();
+
+    const add = name => {
+        const trimmed = (name || "").trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        if (!set.has(key)) {
+            set.set(key, trimmed);
+        }
+    };
+
+    transactions.forEach(t => add(t.description));
+    recurring.forEach(r => add(r.description));
+    savedDescriptions.forEach(d => add(d));
+
+    savedDescriptions = Array.from(set.values()).sort((a, b) =>
+        a.localeCompare(b, "pt-BR", { sensitivity: "base" })
+    );
 }
 
 function applyDataSnapshot(data) {
@@ -101,6 +140,12 @@ function applyDataSnapshot(data) {
     initialBalances = data.initialBalances || {};
     invoiceSettings = data.invoiceSettings || {};
     recurringMonthOverrides = data.recurringMonthOverrides || {};
+
+    if (Array.isArray(data.savedDescriptions)) {
+        savedDescriptions = data.savedDescriptions.slice();
+    } else {
+        savedDescriptions = [];
+    }
 
     if (Array.isArray(data.recurring)) {
         recurring = data.recurring.map(item => ({
@@ -123,6 +168,8 @@ function applyDataSnapshot(data) {
             ]
         }));
     }
+
+    rebuildSavedDescriptions();
 }
 
 function applyRecurringSnapshot(data) {
@@ -131,6 +178,8 @@ function applyRecurringSnapshot(data) {
             ...item,
             type: item.type === "expense" ? "debit" : item.type
         }));
+
+        rebuildSavedDescriptions();
     }
 }
 
@@ -160,6 +209,7 @@ function loadData() {
                 ...item,
                 type: item.type === "expense" ? "debit" : item.type
             }));
+            rebuildSavedDescriptions();
             return;
         }
 
@@ -171,6 +221,8 @@ function loadData() {
                 type: item.type === "expense" ? "debit" : item.type
             }));
         }
+
+        rebuildSavedDescriptions();
 
     } catch (error) {
         alert("Erro ao carregar os dados salvos.");
@@ -366,6 +418,8 @@ async function loadFromDrive() {
             const data = await res.json();
             applyRecurringSnapshot(data);
         }
+
+        rebuildSavedDescriptions();
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             ...getDataSnapshot(),
@@ -1244,6 +1298,34 @@ function editTransaction(item) {
 }
 
 // ==========================================
+// SUGESTÕES DE DESCRIÇÃO (DATALIST)
+// ==========================================
+
+function populateDescriptionOptions(targetInputId, datalistId) {
+    const input = $(targetInputId);
+    const datalist = $(datalistId);
+
+    if (!input || !datalist) return;
+
+    datalist.innerHTML = "";
+
+    savedDescriptions.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        datalist.appendChild(opt);
+    });
+}
+
+function attachDatalist(inputId, datalistId) {
+    const input = $(inputId);
+    const datalist = $(datalistId);
+
+    if (!input || !datalist) return;
+
+    input.setAttribute("list", datalistId);
+}
+
+// ==========================================
 // FORMULÁRIO DE NOVO LANÇAMENTO
 // ==========================================
 
@@ -1261,6 +1343,7 @@ function openTransactionForm(type, date) {
     $("transactionInstallments").value = "1";
 
     updateInstallmentVisibility();
+    populateDescriptionOptions("transactionDescription", "transactionDescriptionList");
 
     modal.classList.remove("hidden");
 }
@@ -1302,6 +1385,8 @@ $("transactionForm").addEventListener("submit", event => {
         alert("Preencha os dados corretamente.");
         return;
     }
+
+    registerDescription(description);
 
     if (type === "credit" && installments > 1) {
         const baseDate = parseDate(date);
@@ -1346,6 +1431,8 @@ $("transactionForm").addEventListener("submit", event => {
             date
         });
     }
+
+    rebuildSavedDescriptions();
 
     saveData();
     updateDashboard();
@@ -1595,6 +1682,8 @@ function openRecurringEditModal(item) {
 
     $("recurringEditResetContainer").classList.toggle("hidden", !hasOverride);
 
+    populateDescriptionOptions("recurringEditDescription", "recurringEditDescriptionList");
+
     $("recurringEditModal").classList.remove("hidden");
 }
 
@@ -1658,6 +1747,7 @@ $("recurringEditForm").addEventListener("submit", event => {
         || item.versions[item.versions.length - 1];
 
     item.description = description;
+    registerDescription(description);
 
     if (onlyThisMonth) {
         const overrideKey = getOverrideKey(item.id, selectedDate);
@@ -1729,6 +1819,8 @@ $("recurringEditForm").addEventListener("submit", event => {
         });
     }
 
+    rebuildSavedDescriptions();
+
     saveData();
     updateDashboard();
     renderRecurringList();
@@ -1747,6 +1839,8 @@ $("openRecurringForm").addEventListener("click", () => {
     $("recurringForm").reset();
 
     $("recurringStart").value = suggestedDateInSelectedMonth();
+
+    populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 });
 
 $("closeRecurringForm").addEventListener("click", () => {
@@ -1767,6 +1861,8 @@ $("recurringForm").addEventListener("submit", event => {
         return;
     }
 
+    registerDescription(description);
+
     recurring.push({
         id: makeId(),
         description,
@@ -1781,6 +1877,8 @@ $("recurringForm").addEventListener("submit", event => {
             }
         ]
     });
+
+    rebuildSavedDescriptions();
 
     saveData();
     updateDashboard();
@@ -1889,6 +1987,7 @@ function confirmSelectedDeletion() {
         if (deleteOneTime && deleteRecurring) {
             initialBalances = {};
             invoiceSettings = {};
+            savedDescriptions = [];
         }
 
         $("backupMessage").textContent = "";
@@ -1941,6 +2040,8 @@ function confirmSelectedDeletion() {
             delete invoiceSettings[key];
         }
     }
+
+    rebuildSavedDescriptions();
 
     saveData();
 
@@ -1996,7 +2097,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 16,
+        version: 17,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
@@ -2051,6 +2152,8 @@ $("importFile").addEventListener("change", async event => {
             }));
         }
 
+        rebuildSavedDescriptions();
+
         saveData();
         updateDashboard();
 
@@ -2077,7 +2180,14 @@ $("syncNowButton").addEventListener("click", async () => {
 // INICIALIZAÇÃO
 // ==========================================
 
+attachDatalist("transactionDescription", "transactionDescriptionList");
+attachDatalist("recurringDescription", "recurringDescriptionList");
+attachDatalist("recurringEditDescription", "recurringEditDescriptionList");
+
 loadData();
+
+populateDescriptionOptions("transactionDescription", "transactionDescriptionList");
+populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 
 updateDashboard();
 updateCloudButtons();
