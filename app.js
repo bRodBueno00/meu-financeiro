@@ -7,22 +7,22 @@ const CLIENT_ID = "127934343018-kpdvptdrvp8ov899cjii6okrmv2u17d2.apps.googleuser
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "MeuFinanceiro";
 const FILE_NAME = "financeiro.json";
+const RECURRING_FILE_NAME = "recorrentes.json";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 
 let tokenClient = null;
 let accessToken = null;
 let currentFileId = null;
+let currentRecurringFileId = null;
 let saveTimer = null;
 
 let transactions = [];
-let plans = [];
+let recurring = [];
 let selectedDate = new Date();
 
 let initialBalances = {};
 let invoiceSettings = {};
-let skippedOccurrences = [];
-let planOverrides = {};
 
 let pendingTransactionType = null;
 let pendingTransactionDate = null;
@@ -60,135 +60,25 @@ function makeId() {
         : String(Date.now()) + Math.random();
 }
 
-function currentMonthStart() {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1, 12);
-}
-
 // ==========================================
 // PERSISTÊNCIA LOCAL + DRIVE
 // ==========================================
 
 function getDataSnapshot() {
     return {
-        version: 5,
+        version: 6,
         transactions,
-        plans,
+        recurring,
         initialBalances,
-        invoiceSettings,
-        skippedOccurrences,
-        planOverrides
+        invoiceSettings
     };
 }
 
-function migratePlansToMaterialized() {
-    const cutoff = currentMonthStart();
-    const cutoffDate = localDate(cutoff);
-
-    plans.forEach(plan => {
-        if (!plan.date) return;
-
-        const start = parseDate(plan.date);
-
-        if (plan.repeat === "once") {
-            if (plan.date < cutoffDate) {
-                const already = transactions.some(t =>
-                    t.sourcePlanId === plan.id &&
-                    t.sourceOccurrenceDate === plan.date
-                );
-
-                if (!already) {
-                    const overriddenAmount = planOverrides[`${plan.id}|${monthKey(start)}`];
-                    transactions.push({
-                        id: makeId(),
-                        description: plan.description,
-                        amount: overriddenAmount !== undefined ? overriddenAmount : plan.amount,
-                        type: plan.type,
-                        date: plan.date,
-                        sourcePlanId: plan.id,
-                        sourceOccurrenceDate: plan.date
-                    });
-                }
-            }
-            return;
-        }
-
-        if (plan.repeat === "monthly" || plan.repeat === "yearly") {
-            const endExclusive = new Date(cutoff.getFullYear(), cutoff.getMonth(), 1, 12);
-
-            let cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
-            if (plan.repeat === "yearly") {
-                cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
-            }
-
-            let guard = 0;
-            while (cursor < endExclusive && guard < 480) {
-                guard++;
-
-                if (plan.repeat === "yearly" && cursor.getMonth() !== start.getMonth()) {
-                    cursor = new Date(cursor.getFullYear() + 1, start.getMonth(), 1, 12);
-                    continue;
-                }
-
-                const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
-                const day = Math.min(start.getDate(), lastDay);
-                const occurrence = localDate(new Date(cursor.getFullYear(), cursor.getMonth(), day, 12));
-
-                if (occurrence >= plan.date && occurrence < cutoffDate) {
-                    const exclusion = `${plan.id}|${occurrence}`;
-                    const already = transactions.some(t =>
-                        t.sourcePlanId === plan.id &&
-                        t.sourceOccurrenceDate === occurrence
-                    );
-
-                    if (!already && !skippedOccurrences.includes(exclusion)) {
-                        const overriddenAmount = planOverrides[`${plan.id}|${monthKey(parseDate(occurrence))}`];
-                        transactions.push({
-                            id: makeId(),
-                            description: plan.description,
-                            amount: overriddenAmount !== undefined ? overriddenAmount : plan.amount,
-                            type: plan.type,
-                            date: occurrence,
-                            sourcePlanId: plan.id,
-                            sourceOccurrenceDate: occurrence
-                        });
-                    }
-                }
-
-                if (plan.repeat === "monthly") {
-                    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12);
-                } else {
-                    cursor = new Date(cursor.getFullYear() + 1, cursor.getMonth(), 1, 12);
-                }
-            }
-        }
-    });
-
-    const cutoffMonthKey = monthKey(cutoff);
-
-    Object.keys(planOverrides).forEach(k => {
-        const parts = k.split("|");
-        if (parts.length === 2 && parts[1] < cutoffMonthKey) {
-            delete planOverrides[k];
-        }
-    });
-
-    plans.forEach(plan => {
-        if (plan.date < cutoffDate) {
-            if (plan.repeat === "once") {
-                plan._materializedPast = true;
-            } else {
-                plan.date = cutoffDate;
-            }
-        }
-    });
-
-    plans = plans.filter(plan => !(plan.repeat === "once" && plan._materializedPast));
-
-    skippedOccurrences = skippedOccurrences.filter(key => {
-        const [, occurrence] = key.split("|");
-        return occurrence >= cutoffDate;
-    });
+function getRecurringSnapshot() {
+    return {
+        version: 1,
+        recurring
+    };
 }
 
 function applyDataSnapshot(data) {
@@ -197,20 +87,47 @@ function applyDataSnapshot(data) {
         type: item.type === "expense" ? "debit" : item.type
     }));
 
-    plans = (data.plans || []).map(item => ({
+    recurring = (data.recurring || []).map(item => ({
         ...item,
         type: item.type === "expense" ? "debit" : item.type
     }));
 
+    if (Array.isArray(data.plans) && data.plans.length > 0) {
+        data.plans.forEach(plan => {
+            if (plan.repeat === "once") {
+                transactions.push({
+                    id: plan.id || makeId(),
+                    description: plan.description,
+                    amount: plan.amount,
+                    type: plan.type === "expense" ? "debit" : plan.type,
+                    date: plan.date
+                });
+            } else {
+                recurring.push({
+                    id: plan.id || makeId(),
+                    description: plan.description,
+                    amount: plan.amount,
+                    type: plan.type === "expense" ? "debit" : plan.type,
+                    startDate: plan.date,
+                    endDate: null,
+                    hasEndDate: false,
+                    dayOfMonth: parseDate(plan.date).getDate(),
+                    frequency: plan.repeat === "yearly" ? "yearly" : "monthly"
+                });
+            }
+        });
+    }
+
     initialBalances = data.initialBalances || {};
     invoiceSettings = data.invoiceSettings || {};
-    skippedOccurrences = Array.isArray(data.skippedOccurrences)
-        ? data.skippedOccurrences
-        : [];
-    planOverrides = data.planOverrides || {};
+}
 
-    if (!data.version || data.version < 5) {
-        migratePlansToMaterialized();
+function applyRecurringSnapshot(data) {
+    if (data && Array.isArray(data.recurring)) {
+        recurring = data.recurring.map(item => ({
+            ...item,
+            type: item.type === "expense" ? "debit" : item.type
+        }));
     }
 }
 
@@ -334,6 +251,7 @@ function logoutGoogle() {
 
     accessToken = null;
     currentFileId = null;
+    currentRecurringFileId = null;
     localStorage.removeItem("meuFinanceiroToken");
     setCloudStatus("Drive: desconectado");
     updateCloudButtons();
@@ -386,9 +304,9 @@ async function findOrCreateFolder() {
     return created.id;
 }
 
-async function findFileInFolder(folderId) {
+async function findFileInFolder(folderId, fileName) {
     const query = encodeURIComponent(
-        `name='${FILE_NAME}' and '${folderId}' in parents and trashed=false`
+        `name='${fileName}' and '${folderId}' in parents and trashed=false`
     );
 
     const res = await driveFetch(
@@ -411,20 +329,31 @@ async function loadFromDrive() {
         setCloudStatus("Drive: carregando...");
 
         const folderId = await findOrCreateFolder();
-        const file = await findFileInFolder(folderId);
 
-        if (!file) {
+        const file = await findFileInFolder(folderId, FILE_NAME);
+        const recurringFile = await findFileInFolder(folderId, RECURRING_FILE_NAME);
+
+        if (!file && !recurringFile) {
             setCloudStatus("Drive: conectado (sem arquivo ainda)");
             currentFileId = null;
+            currentRecurringFileId = null;
             return;
         }
 
-        currentFileId = file.id;
+        if (file) {
+            currentFileId = file.id;
+            const res = await driveFetch(`${DRIVE_API}/files/${file.id}?alt=media`);
+            const data = await res.json();
+            applyDataSnapshot(data);
+        }
 
-        const res = await driveFetch(`${DRIVE_API}/files/${file.id}?alt=media`);
-        const data = await res.json();
+        if (recurringFile) {
+            currentRecurringFileId = recurringFile.id;
+            const res = await driveFetch(`${DRIVE_API}/files/${recurringFile.id}?alt=media`);
+            const data = await res.json();
+            applyRecurringSnapshot(data);
+        }
 
-        applyDataSnapshot(data);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(getDataSnapshot()));
 
         setCloudStatus("Drive: dados carregados");
@@ -445,6 +374,45 @@ function scheduleCloudSave() {
     }, 1200);
 }
 
+async function uploadOrUpdateFile(folderId, fileName, currentId, body) {
+    if (!currentId) {
+        const existing = await findFileInFolder(folderId, fileName);
+        if (existing) currentId = existing.id;
+    }
+
+    if (!currentId) {
+        const metadata = {
+            name: fileName,
+            mimeType: "application/json",
+            parents: [folderId]
+        };
+
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+        form.append("file", new Blob([body], { type: "application/json" }));
+
+        const res = await driveFetch(
+            `${UPLOAD_API}/files?uploadType=multipart&fields=id`,
+            { method: "POST", body: form }
+        );
+
+        const created = await res.json();
+        return created.id;
+    }
+
+    const res = await driveFetch(
+        `${UPLOAD_API}/files/${currentId}?uploadType=media`,
+        {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body
+        }
+    );
+
+    if (!res.ok) throw new Error("Falha ao atualizar arquivo");
+    return currentId;
+}
+
 async function saveToDrive() {
     if (!accessToken) return;
 
@@ -453,43 +421,22 @@ async function saveToDrive() {
 
         const folderId = await findOrCreateFolder();
 
-        if (!currentFileId) {
-            const existing = await findFileInFolder(folderId);
-            if (existing) currentFileId = existing.id;
-        }
+        const financeiroBody = JSON.stringify({
+            version: 6,
+            transactions,
+            initialBalances,
+            invoiceSettings
+        }, null, 2);
 
-        const body = JSON.stringify(getDataSnapshot(), null, 2);
+        const recurringBody = JSON.stringify(getRecurringSnapshot(), null, 2);
 
-        if (!currentFileId) {
-            const metadata = {
-                name: FILE_NAME,
-                mimeType: "application/json",
-                parents: [folderId]
-            };
+        currentFileId = await uploadOrUpdateFile(
+            folderId, FILE_NAME, currentFileId, financeiroBody
+        );
 
-            const form = new FormData();
-            form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-            form.append("file", new Blob([body], { type: "application/json" }));
-
-            const res = await driveFetch(
-                `${UPLOAD_API}/files?uploadType=multipart&fields=id`,
-                { method: "POST", body: form }
-            );
-
-            const created = await res.json();
-            currentFileId = created.id;
-        } else {
-            const res = await driveFetch(
-                `${UPLOAD_API}/files/${currentFileId}?uploadType=media`,
-                {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body
-                }
-            );
-
-            if (!res.ok) throw new Error("Falha ao atualizar arquivo");
-        }
+        currentRecurringFileId = await uploadOrUpdateFile(
+            folderId, RECURRING_FILE_NAME, currentRecurringFileId, recurringBody
+        );
 
         setCloudStatus("Drive: salvo ✓");
     } catch (error) {
@@ -619,18 +566,10 @@ function saveInitialBalance() {
 }
 
 // ==========================================
-// PROGRAMAÇÕES RECORRENTES
+// LANÇAMENTOS RECORRENTES (novo modelo)
 // ==========================================
 
 function getOccurrencesForMonth(date) {
-    const cutoffMonth = currentMonthStart();
-    const cutoffKey = monthKey(cutoffMonth);
-    const targetKey = monthKey(date);
-
-    if (targetKey < cutoffKey) {
-        return [];
-    }
-
     const year = date.getFullYear();
     const month = date.getMonth();
 
@@ -639,55 +578,43 @@ function getOccurrencesForMonth(date) {
 
     const occurrences = [];
 
-    plans.forEach(plan => {
-        const start = parseDate(plan.date);
+    recurring.forEach(item => {
+        const start = parseDate(item.startDate);
 
-        if (plan.repeat === "once") {
-            if (monthKey(start) === monthKey(date)) {
-                occurrences.push({ ...plan, occurrenceDate: plan.date });
-            }
-            return;
-        }
-
-        if (plan.repeat === "monthly") {
-            if (first < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
-                return;
-            }
-
-            const day = Math.min(start.getDate(), last.getDate());
-            const occurrence = localDate(new Date(year, month, day, 12));
-
-            if (occurrence >= plan.date) {
-                occurrences.push({ ...plan, occurrenceDate: occurrence });
-            }
-            return;
-        }
-
-        if (plan.repeat === "yearly") {
+        if (item.frequency === "yearly") {
             if (year < start.getFullYear()) return;
 
-            if (month === start.getMonth()) {
-                const day = Math.min(start.getDate(), last.getDate());
-                const occurrence = localDate(new Date(year, month, day, 12));
+            if (month !== start.getMonth()) return;
 
-                if (occurrence >= plan.date) {
-                    occurrences.push({ ...plan, occurrenceDate: occurrence });
-                }
-            }
+            const day = Math.min(
+                item.dayOfMonth || start.getDate(),
+                last.getDate()
+            );
+            const occurrence = localDate(
+                new Date(year, month, day, 12)
+            );
+
+            if (occurrence < item.startDate) return;
+            if (item.endDate && occurrence > item.endDate) return;
+
+            occurrences.push({ ...item, occurrenceDate: occurrence });
+            return;
         }
+
+        if (first < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
+            return;
+        }
+
+        const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
+        const occurrence = localDate(new Date(year, month, day, 12));
+
+        if (occurrence < item.startDate) return;
+        if (item.endDate && occurrence > item.endDate) return;
+
+        occurrences.push({ ...item, occurrenceDate: occurrence });
     });
 
-    return occurrences
-        .filter(item =>
-            !skippedOccurrences.includes(`${item.id}|${item.occurrenceDate}`)
-        )
-        .map(item => {
-            const overrideKey = `${item.id}|${targetKey}`;
-            if (planOverrides[overrideKey] !== undefined) {
-                return { ...item, amount: planOverrides[overrideKey] };
-            }
-            return item;
-        });
+    return occurrences;
 }
 
 function getMonthlyOccurrences() {
@@ -912,7 +839,6 @@ function updateDashboard() {
     renderInvoiceSettings();
     renderDailyCalendar(actual, scheduled);
     renderTransactions(actual);
-    renderPlans();
 }
 
 // ==========================================
@@ -1030,8 +956,7 @@ function deleteDayTransactions(date) {
     const count = dayTransactions.length;
 
     const confirmed = confirm(
-        `Deseja excluir os ${count} lançamento(s) manual(is) do dia ${formatDate(date)}?\n\n` +
-        "As programações recorrentes não serão excluídas."
+        `Deseja excluir os ${count} lançamento(s) manual(is) do dia ${formatDate(date)}?`
     );
 
     if (!confirmed) return;
@@ -1112,7 +1037,9 @@ function openDayTransactionsModal(date, type) {
             name.textContent = item.description || labels[item.type];
 
             const details = document.createElement("small");
-            details.textContent = labels[item.type];
+            details.textContent = item.occurrenceDate
+                ? `${labels[item.type]} • Recorrente`
+                : labels[item.type];
 
             info.append(name, details);
 
@@ -1129,7 +1056,7 @@ function openDayTransactionsModal(date, type) {
 
             value.addEventListener("click", () => {
                 if (item.occurrenceDate) {
-                    editPlanOccurrence(item);
+                    editRecurring(item);
                 } else {
                     editTransaction(item);
                 }
@@ -1142,22 +1069,21 @@ function openDayTransactionsModal(date, type) {
 
             remove.addEventListener("click", () => {
                 if (item.occurrenceDate) {
-                    deletePlanOccurrence(item, true);
+                    if (!confirm(`Excluir o lançamento recorrente "${item.description}"? Todas as ocorrências serão removidas.`)) return;
+                    recurring = recurring.filter(x => x.id !== item.id);
                 } else if (item.installmentGroupId) {
                     if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
                         return;
                     }
                     transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
-                    saveData();
-                    updateDashboard();
-                    closeDayModal();
                 } else {
                     if (!confirm("Excluir este lançamento?")) return;
                     transactions = transactions.filter(x => x.id !== item.id);
-                    saveData();
-                    updateDashboard();
-                    closeDayModal();
                 }
+
+                saveData();
+                updateDashboard();
+                closeDayModal();
             });
 
             actions.append(value, remove);
@@ -1203,31 +1129,6 @@ function openDayTransactionsModal(date, type) {
 
 function closeDayModal() {
     $("dayTransactionsModal").classList.add("hidden");
-}
-
-function editPlanOccurrence(item) {
-    const key = `${item.id}|${monthKey(selectedDate)}`;
-    const currentAmount = item.amount;
-
-    const msg = `Editar valor de "${item.description}" para o mês de ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}.\n\nDigite o novo valor (ou deixe em branco para restaurar o valor original):`;
-    const novoValorStr = prompt(msg, currentAmount);
-
-    if (novoValorStr === null) return;
-
-    const novoValor = parseFloat(novoValorStr.replace(",", "."));
-
-    if (novoValorStr.trim() === "") {
-        delete planOverrides[key];
-    } else if (!isNaN(novoValor) && novoValor > 0) {
-        planOverrides[key] = Math.round(novoValor * 100) / 100;
-    } else {
-        alert("Valor inválido.");
-        return;
-    }
-
-    saveData();
-    updateDashboard();
-    closeDayModal();
 }
 
 function editTransaction(item) {
@@ -1278,174 +1179,33 @@ function editTransaction(item) {
 }
 
 // ==========================================
-// MODAL DE ESCOPO (MÊS ATUAL OU FUTURO)
+// EDIÇÃO DE RECORRENTE
 // ==========================================
 
-let scopeModalCallback = null;
-
-function openScopeModal(title, description, callback) {
-    scopeModalCallback = callback;
-
-    $("scopeModalTitle").textContent = title;
-    $("scopeModalDescription").textContent = description;
-    $("scopeFutureCheckbox").checked = false;
-
-    $("scopeModal").classList.remove("hidden");
-}
-
-function closeScopeModal() {
-    $("scopeModal").classList.add("hidden");
-    scopeModalCallback = null;
-}
-
-function confirmScopeModal() {
-    const includeFuture = $("scopeFutureCheckbox").checked;
-    const callback = scopeModalCallback;
-
-    closeScopeModal();
-
-    if (callback) {
-        callback(includeFuture);
-    }
-}
-
-$("confirmScopeButton").addEventListener("click", confirmScopeModal);
-$("cancelScopeButton").addEventListener("click", closeScopeModal);
-
-$("scopeModal").addEventListener("click", event => {
-    if (event.target === $("scopeModal")) closeScopeModal();
-});
-
-// ==========================================
-// EDIÇÃO DE PROGRAMAÇÃO (MÊS ATUAL OU FUTURO)
-// ==========================================
-
-function editPlanValue(plan) {
-    const key = `${plan.id}|${monthKey(selectedDate)}`;
-    const isOverridden = planOverrides[key] !== undefined;
-    const currentAmount = isOverridden ? planOverrides[key] : plan.amount;
-
+function editRecurring(item) {
     const novoValorStr = prompt(
-        `Editar valor de "${plan.description}".\n\n` +
-        `Valor atual: ${money(currentAmount)}\n\n` +
-        `Digite o novo valor:`,
-        currentAmount
+        `Editar valor de "${item.description}".\n\n` +
+        `Este é um lançamento recorrente. Alterar o valor aqui afetará todas as ocorrências (passadas, presente e futuras).\n\n` +
+        `Valor atual: ${money(item.amount)}\n\n` +
+        `Digite o novo valor (ou deixe em branco para manter):`,
+        item.amount
     );
 
     if (novoValorStr === null) return;
 
     const novoValor = parseFloat(novoValorStr.replace(",", "."));
 
-    if (isNaN(novoValor) || novoValor <= 0) {
-        alert("Valor inválido.");
-        return;
-    }
-
-    const roundedValue = Math.round(novoValor * 100) / 100;
-
-    openScopeModal(
-        "Aplicar novo valor",
-        `Novo valor: ${money(roundedValue)}\n\nMarque a opção abaixo se deseja aplicar também aos meses futuros. Caso contrário, o novo valor será aplicado somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
-        (includeFuture) => {
-            if (includeFuture) {
-                const planStart = parseDate(plan.date);
-                const currentMonth = currentMonthStart();
-                const planStartKey = monthKey(planStart);
-                const currentKey = monthKey(currentMonth);
-
-                if (planStartKey >= currentKey) {
-                    plan.amount = roundedValue;
-
-                    const keysToRemove = Object.keys(planOverrides).filter(k => {
-                        if (!k.startsWith(`${plan.id}|`)) return false;
-                        const overrideMonthKey = k.split("|")[1];
-                        return overrideMonthKey >= currentKey;
-                    });
-
-                    keysToRemove.forEach(k => delete planOverrides[k]);
-                } else {
-                    planOverrides[key] = roundedValue;
-                }
-
-                const futurePlanTransactions = transactions.filter(t =>
-                    t.sourcePlanId === plan.id &&
-                    t.date >= localDate(currentMonth)
-                );
-
-                futurePlanTransactions.forEach(t => {
-                    t.amount = roundedValue;
-                });
-            } else {
-                planOverrides[key] = roundedValue;
-            }
-
-            saveData();
-            updateDashboard();
+    if (!isNaN(novoValor) && novoValor > 0) {
+        const index = recurring.findIndex(x => x.id === item.id);
+        if (index !== -1) {
+            recurring[index].amount = Math.round(novoValor * 100) / 100;
         }
-    );
-}
-
-// ==========================================
-// EXCLUSÃO DE PROGRAMAÇÃO (MÊS ATUAL OU FUTURO)
-// ==========================================
-
-function deletePlanOccurrence(item, fromDayModal) {
-    if (!item || !item.id) {
-        alert("Não foi possível identificar a programação.");
-        return;
-    }
-
-    if (item.repeat === "once") {
-        if (!confirm(`Excluir a programação "${item.description}"?`)) return;
-
-        plans = plans.filter(x => x.id !== item.id);
-
         saveData();
         updateDashboard();
-        if (fromDayModal) closeDayModal();
-        return;
+        closeDayModal();
+    } else if (novoValorStr.trim() !== "") {
+        alert("Valor inválido.");
     }
-
-    openScopeModal(
-        "Excluir programação",
-        `Você está excluindo "${item.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
-        (includeFuture) => {
-            const currentMonth = currentMonthStart();
-            const currentMonthDate = localDate(currentMonth);
-
-            if (includeFuture) {
-                const planTransactionsFuture = transactions.filter(t =>
-                    t.sourcePlanId === item.id &&
-                    t.date >= currentMonthDate
-                );
-
-                transactions = transactions.filter(t =>
-                    !(t.sourcePlanId === item.id && t.date >= currentMonthDate)
-                );
-
-                if (planTransactionsFuture.length === 0 || true) {
-                    plans = plans.filter(x => x.id !== item.id);
-                }
-
-                const keysToRemove = Object.keys(planOverrides).filter(k => {
-                    if (!k.startsWith(`${item.id}|`)) return false;
-                    const overrideMonthKey = k.split("|")[1];
-                    return overrideMonthKey >= monthKey(currentMonth);
-                });
-
-                keysToRemove.forEach(k => delete planOverrides[k]);
-            } else {
-                const exclusion = `${item.id}|${item.occurrenceDate}`;
-                if (!skippedOccurrences.includes(exclusion)) {
-                    skippedOccurrences.push(exclusion);
-                }
-            }
-
-            saveData();
-            updateDashboard();
-            if (fromDayModal) closeDayModal();
-        }
-    );
 }
 
 // ==========================================
@@ -1591,9 +1351,6 @@ function renderTransactions(items) {
             if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
                 detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
             }
-            if (item.sourcePlanId) {
-                detailText += " • Programação";
-            }
             details.textContent = detailText;
 
             info.append(name, details);
@@ -1644,28 +1401,32 @@ function renderTransactions(items) {
 }
 
 // ==========================================
-// LISTA DE PROGRAMAÇÕES
+// MENU DE LANÇAMENTOS RECORRENTES
 // ==========================================
 
-function renderPlans() {
-    const container = $("planningList");
+function openRecurringMenu() {
+    $("recurringMenu").classList.remove("hidden");
+    $("recurringFormContainer").classList.add("hidden");
+    renderRecurringList();
+}
+
+function closeRecurringMenu() {
+    $("recurringMenu").classList.add("hidden");
+}
+
+function renderRecurringList() {
+    const container = $("recurringList");
     container.innerHTML = "";
 
-    if (!plans.length) {
+    if (!recurring.length) {
         const empty = document.createElement("p");
         empty.className = "empty-message";
-        empty.textContent = "Nenhuma programação cadastrada.";
+        empty.textContent = "Nenhum lançamento recorrente cadastrado.";
         container.appendChild(empty);
         return;
     }
 
-    const repeatNames = {
-        once: "Uma vez",
-        monthly: "Todo mês",
-        yearly: "Todo ano"
-    };
-
-    plans.forEach(plan => {
+    recurring.forEach(item => {
         const row = document.createElement("div");
         row.className = "planning-item";
 
@@ -1673,149 +1434,177 @@ function renderPlans() {
         info.className = "item-info";
 
         const name = document.createElement("strong");
-        name.textContent = plan.description;
+        name.textContent = item.description;
 
         const details = document.createElement("small");
-        details.textContent =
-            `${formatDate(plan.date)} • ${repeatNames[plan.repeat]}`;
+        const end = item.endDate
+            ? `até ${formatDate(item.endDate)}`
+            : "sem data fim";
+        details.textContent = `Início ${formatDate(item.startDate)} • ${end}`;
 
         info.append(name, details);
 
         const actions = document.createElement("div");
         actions.className = "item-actions";
 
-        const key = `${plan.id}|${monthKey(selectedDate)}`;
-        const isOverridden = planOverrides[key] !== undefined;
-        const displayAmount = isOverridden ? planOverrides[key] : plan.amount;
-
         const value = document.createElement("span");
         value.className = "item-value " +
-            (plan.type === "income" ? "green" : "red");
-        
-        value.style.cursor = "pointer";
-        value.style.textDecoration = "underline dashed";
-        value.title = "Clique para editar o valor";
-
+            (item.type === "income" ? "green" : "red");
         value.textContent =
-            `${plan.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
+            `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
 
-        value.addEventListener("click", () => {
-            editPlanValue(plan);
+        const editBtn = document.createElement("button");
+        editBtn.className = "outline-button";
+        editBtn.textContent = "Editar";
+        editBtn.addEventListener("click", () => {
+            editRecurringFromMenu(item);
         });
 
         const remove = document.createElement("button");
         remove.className = "delete-button";
         remove.textContent = "✕";
-        remove.title = "Excluir programação";
+        remove.title = "Excluir lançamento recorrente";
 
         remove.addEventListener("click", () => {
-            const currentOccurrence = getMonthlyOccurrences().find(
-                o => o.id === plan.id
-            );
-
-            if (currentOccurrence) {
-                deletePlanOccurrence(currentOccurrence, false);
-                return;
-            }
-
-            if (plan.repeat === "once") {
-                if (!confirm(`Excluir a programação "${plan.description}"?`)) return;
-                plans = plans.filter(x => x.id !== plan.id);
-                saveData();
-                updateDashboard();
-                return;
-            }
-
-            openScopeModal(
-                "Excluir programação",
-                `Você está excluindo "${plan.description}".\n\nMarque a opção abaixo se deseja excluir também os meses futuros. Caso contrário, a exclusão será somente em ${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})}. O passado será sempre preservado.`,
-                (includeFuture) => {
-                    const currentMonth = currentMonthStart();
-                    const currentMonthDate = localDate(currentMonth);
-
-                    if (includeFuture) {
-                        transactions = transactions.filter(t =>
-                            !(t.sourcePlanId === plan.id && t.date >= currentMonthDate)
-                        );
-
-                        plans = plans.filter(x => x.id !== plan.id);
-
-                        const keysToRemove = Object.keys(planOverrides).filter(k => {
-                            if (!k.startsWith(`${plan.id}|`)) return false;
-                            const overrideMonthKey = k.split("|")[1];
-                            return overrideMonthKey >= monthKey(currentMonth);
-                        });
-
-                        keysToRemove.forEach(k => delete planOverrides[k]);
-                    } else {
-                        const day = Math.min(
-                            parseDate(plan.date).getDate(),
-                            new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate()
-                        );
-                        const syntheticDate = localDate(
-                            new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day, 12)
-                        );
-                        const exclusion = `${plan.id}|${syntheticDate}`;
-                        if (!skippedOccurrences.includes(exclusion)) {
-                            skippedOccurrences.push(exclusion);
-                        }
-                    }
-
-                    saveData();
-                    updateDashboard();
-                }
-            );
+            if (!confirm(`Excluir o lançamento recorrente "${item.description}"?`)) return;
+            recurring = recurring.filter(x => x.id !== item.id);
+            saveData();
+            updateDashboard();
+            renderRecurringList();
         });
 
-        actions.append(value, remove);
+        actions.append(value, editBtn, remove);
         row.append(info, actions);
         container.appendChild(row);
     });
 }
 
+function editRecurringFromMenu(item) {
+    const descricao = prompt("Descrição:", item.description);
+    if (descricao === null) return;
+
+    const valorStr = prompt("Valor (R$):", item.amount);
+    if (valorStr === null) return;
+
+    const valor = parseFloat(valorStr.replace(",", "."));
+    if (isNaN(valor) || valor <= 0) {
+        alert("Valor inválido.");
+        return;
+    }
+
+    const inicio = prompt("Data início (AAAA-MM-DD):", item.startDate);
+    if (inicio === null) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) {
+        alert("Data início inválida.");
+        return;
+    }
+
+    const temFim = confirm("Este lançamento tem data fim?\n\nOK = Sim (informar data fim)\nCancelar = Não (sem data fim)");
+
+    let fim = null;
+
+    if (temFim) {
+        const fimStr = prompt("Data fim (AAAA-MM-DD):", item.endDate || "");
+        if (fimStr === null) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fimStr)) {
+            alert("Data fim inválida.");
+            return;
+        }
+        fim = fimStr;
+    }
+
+    const index = recurring.findIndex(x => x.id === item.id);
+    if (index !== -1) {
+        recurring[index] = {
+            ...recurring[index],
+            description: descricao.trim() || item.description,
+            amount: Math.round(valor * 100) / 100,
+            startDate: inicio,
+            endDate: fim,
+            hasEndDate: temFim,
+            dayOfMonth: parseDate(inicio).getDate()
+        };
+    }
+
+    saveData();
+    updateDashboard();
+    renderRecurringList();
+}
+
 // ==========================================
-// FORMULÁRIO DE PROGRAMAÇÃO
+// FORMULÁRIO DE NOVO RECORRENTE
 // ==========================================
 
-$("openPlanning").addEventListener("click", () => {
-    $("planningFormContainer").classList.toggle("hidden");
+$("openRecurringMenu").addEventListener("click", openRecurringMenu);
+$("closeRecurringMenu").addEventListener("click", closeRecurringMenu);
+$("openRecurringForm").addEventListener("click", () => {
+    $("recurringFormContainer").classList.remove("hidden");
+    $("recurringForm").reset();
+    $("recurringStart").value = localDate(new Date());
+    $("recurringHasEnd").checked = false;
+    $("recurringEndContainer").classList.add("hidden");
 });
 
-$("closePlanning").addEventListener("click", () => {
-    $("planningFormContainer").classList.add("hidden");
-    $("planningForm").reset();
+$("closeRecurringForm").addEventListener("click", () => {
+    $("recurringFormContainer").classList.add("hidden");
 });
 
-$("planningForm").addEventListener("submit", event => {
+$("recurringHasEnd").addEventListener("change", () => {
+    if ($("recurringHasEnd").checked) {
+        $("recurringEndContainer").classList.remove("hidden");
+    } else {
+        $("recurringEndContainer").classList.add("hidden");
+        $("recurringEnd").value = "";
+    }
+});
+
+$("recurringForm").addEventListener("submit", event => {
     event.preventDefault();
 
-    const description = $("planDescription").value.trim();
-    const amount = Number($("planAmount").value);
-    const type = $("planType").value;
-    const date = $("planDate").value;
-    const repeat = $("planRepeat").value;
+    const description = $("recurringDescription").value.trim();
+    const amount = Number($("recurringAmount").value);
+    const type = $("recurringType").value;
+    const startDate = $("recurringStart").value;
+    const hasEnd = $("recurringHasEnd").checked;
+    const endDate = hasEnd ? $("recurringEnd").value : null;
+    const frequency = $("recurringFrequency").value;
 
-    if (!description || !Number.isFinite(amount) || amount <= 0 || !date) {
+    if (!description || !Number.isFinite(amount) || amount <= 0 || !startDate) {
         alert("Preencha os dados corretamente.");
         return;
     }
 
-    plans.push({
+    if (hasEnd && !endDate) {
+        alert("Informe a data fim.");
+        return;
+    }
+
+    if (hasEnd && endDate < startDate) {
+        alert("A data fim deve ser maior ou igual à data início.");
+        return;
+    }
+
+    recurring.push({
         id: makeId(),
         description,
         amount: Math.round(amount * 100) / 100,
         type,
-        date,
-        repeat
+        startDate,
+        endDate,
+        hasEndDate: hasEnd,
+        dayOfMonth: parseDate(startDate).getDate(),
+        frequency
     });
 
     saveData();
-
-    $("planningForm").reset();
-    $("planDate").value = localDate(new Date());
-    $("planningFormContainer").classList.add("hidden");
-
     updateDashboard();
+
+    $("recurringForm").reset();
+    $("recurringStart").value = localDate(new Date());
+    $("recurringHasEnd").checked = false;
+    $("recurringEndContainer").classList.add("hidden");
+    $("recurringFormContainer").classList.add("hidden");
+    renderRecurringList();
 });
 
 // ==========================================
@@ -1870,7 +1659,7 @@ function openDeleteOptions(scope) {
 
     $("deleteModalDescription").textContent = scope === "all"
         ? "Escolha quais categorias deseja apagar de todo o aplicativo. Esta ação não pode ser desfeita."
-        : `Escolha quais categorias deseja apagar de ${monthName}. As programações recorrentes continuarão cadastradas para os outros meses. Esta ação não pode ser desfeita.`;
+        : `Escolha quais categorias deseja apagar de ${monthName}. Os lançamentos recorrentes continuarão cadastrados. Esta ação não pode ser desfeita.`;
 
     $("deleteOneTimeCheckbox").checked = true;
     $("deleteRecurringCheckbox").checked = true;
@@ -1895,9 +1684,7 @@ function confirmSelectedDeletion() {
         if (deleteOneTime) transactions = [];
 
         if (deleteRecurring) {
-            plans = [];
-            skippedOccurrences = [];
-            planOverrides = {};
+            recurring = [];
         }
 
         if (deleteOneTime && deleteRecurring) {
@@ -1906,9 +1693,8 @@ function confirmSelectedDeletion() {
         }
 
         $("backupMessage").textContent = "";
-        $("planningForm").reset();
-        $("planningFormContainer").classList.add("hidden");
-        $("planDate").value = localDate(new Date());
+        $("recurringMenu").classList.add("hidden");
+        $("recurringFormContainer").classList.add("hidden");
 
         selectedDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12);
     } else {
@@ -1923,20 +1709,17 @@ function confirmSelectedDeletion() {
         }
 
         if (deleteRecurring) {
-            plans = plans.filter(plan =>
-                !(plan.repeat === "once" && plan.date.startsWith(monthPrefix))
-            );
+            recurring = recurring.filter(item => {
+                const itemStart = item.startDate;
+                const itemEnd = item.endDate || "9999-12-31";
+                const monthStart = `${monthPrefix}01`;
+                const monthEnd = `${monthPrefix}31`;
 
-            const monthPlans = getOccurrencesForMonth(selectedDate);
+                const overlaps = !(itemEnd < monthStart || itemStart > monthEnd);
 
-            monthPlans.forEach(item => {
-                if (item.repeat !== "once") {
-                    const exclusion = `${item.id}|${item.occurrenceDate}`;
+                if (!overlaps) return true;
 
-                    if (!skippedOccurrences.includes(exclusion)) {
-                        skippedOccurrences.push(exclusion);
-                    }
-                }
+                return false;
             });
         }
 
@@ -1953,7 +1736,7 @@ function confirmSelectedDeletion() {
 
     alert(deleteScope === "all"
         ? "A exclusão selecionada foi concluída."
-        : "Os registros selecionados deste mês foram apagados. As programações recorrentes dos outros meses foram preservadas."
+        : "Os registros selecionados deste mês foram apagados."
     );
 }
 
@@ -1982,6 +1765,10 @@ $("transactionFormModal").addEventListener("click", event => {
     if (event.target === $("transactionFormModal")) closeTransactionForm();
 });
 
+$("recurringMenu").addEventListener("click", event => {
+    if (event.target === $("recurringMenu")) closeRecurringMenu();
+});
+
 // ==========================================
 // SALVAR CONFIGURAÇÕES
 // ==========================================
@@ -1996,7 +1783,7 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 5,
+        version: 6,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot()
     };
@@ -2033,33 +1820,8 @@ $("importFile").addEventListener("change", async event => {
     try {
         const data = JSON.parse(await file.text());
 
-        if (!Array.isArray(data.transactions) || !Array.isArray(data.plans)) {
+        if (!Array.isArray(data.transactions)) {
             throw new Error("Arquivo inválido.");
-        }
-
-        const validTypes = ["income", "credit", "debit", "expense"];
-
-        const validTransactions = data.transactions.every(item =>
-            item.id &&
-            typeof item.description === "string" &&
-            Number.isFinite(item.amount) &&
-            item.amount > 0 &&
-            validTypes.includes(item.type) &&
-            /^\d{4}-\d{2}-\d{2}$/.test(item.date)
-        );
-
-        const validPlans = data.plans.every(item =>
-            item.id &&
-            typeof item.description === "string" &&
-            Number.isFinite(item.amount) &&
-            item.amount > 0 &&
-            ["income", "debit", "expense"].includes(item.type) &&
-            ["once", "monthly", "yearly"].includes(item.repeat) &&
-            /^\d{4}-\d{2}-\d{2}$/.test(item.date)
-        );
-
-        if (!validTransactions || !validPlans) {
-            throw new Error("Dados inválidos.");
         }
 
         if (!confirm("A importação substituirá os dados atuais. Deseja continuar?")) {
@@ -2096,11 +1858,8 @@ $("syncNowButton").addEventListener("click", async () => {
 
 loadData();
 
-if (transactions.some(t => t.sourcePlanId) || plans.length) {
-    migratePlansToMaterialized();
-}
-
-$("planDate").value = localDate(new Date());
+$("planDate") && ($("planDate").value = localDate(new Date()));
+$("recurringStart") && ($("recurringStart").value = localDate(new Date()));
 
 updateDashboard();
 updateCloudButtons();
