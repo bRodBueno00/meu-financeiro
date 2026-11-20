@@ -1016,25 +1016,23 @@ function openDayTransactionsModal(date, type) {
             remove.title = "Excluir lançamento";
 
             remove.addEventListener("click", () => {
-                if (!confirm("Excluir este lançamento?")) return;
-
                 if (item.occurrenceDate) {
-                    const exclusion = `${item.id}|${item.occurrenceDate}`;
-                    if (!skippedOccurrences.includes(exclusion)) {
-                        skippedOccurrences.push(exclusion);
-                    }
+                    deletePlanOccurrence(item, true);
                 } else if (item.installmentGroupId) {
                     if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
                         return;
                     }
                     transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
+                    saveData();
+                    updateDashboard();
+                    closeDayModal();
                 } else {
+                    if (!confirm("Excluir este lançamento?")) return;
                     transactions = transactions.filter(x => x.id !== item.id);
+                    saveData();
+                    updateDashboard();
+                    closeDayModal();
                 }
-
-                saveData();
-                updateDashboard();
-                closeDayModal();
             });
 
             actions.append(value, remove);
@@ -1211,6 +1209,52 @@ function editPlanValue(plan) {
 
     saveData();
     updateDashboard();
+}
+
+// ==========================================
+// EXCLUSÃO DE PROGRAMAÇÃO (MÊS ATUAL OU FUTURO)
+// ==========================================
+
+function deletePlanOccurrence(item, fromDayModal) {
+    const currentMonthKey = monthKey(selectedDate);
+    const planMonthKey = monthKey(parseDate(item.date));
+
+    if (item.repeat === "once") {
+        if (!confirm("Excluir esta programação?")) return;
+
+        plans = plans.filter(x => x.id !== item.id);
+
+        saveData();
+        updateDashboard();
+        if (fromDayModal) closeDayModal();
+        return;
+    }
+
+    const escolha = prompt(
+        `Excluir "${item.description}".\n\n` +
+        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
+        `2 - Este mês e ocorrências futuras\n\n` +
+        `Digite 1 ou 2:`,
+        "1"
+    );
+
+    if (escolha === null) return;
+
+    if (escolha.trim() === "1") {
+        const exclusion = `${item.id}|${item.occurrenceDate}`;
+        if (!skippedOccurrences.includes(exclusion)) {
+            skippedOccurrences.push(exclusion);
+        }
+    } else if (escolha.trim() === "2") {
+        plans = plans.filter(x => x.id !== item.id);
+    } else {
+        alert("Opção inválida.");
+        return;
+    }
+
+    saveData();
+    updateDashboard();
+    if (fromDayModal) closeDayModal();
 }
 
 // ==========================================
@@ -1471,12 +1515,19 @@ function renderPlans() {
         remove.title = "Excluir programação";
 
         remove.addEventListener("click", () => {
-            if (!confirm("Excluir esta programação e suas próximas ocorrências?")) return;
+            const currentOccurrence = getMonthlyOccurrences().find(
+                o => o.id === plan.id
+            );
 
-            plans = plans.filter(x => x.id !== plan.id);
+            if (!currentOccurrence) {
+                if (!confirm("Excluir esta programação?")) return;
+                plans = plans.filter(x => x.id !== plan.id);
+                saveData();
+                updateDashboard();
+                return;
+            }
 
-            saveData();
-            updateDashboard();
+            deletePlanOccurrence(currentOccurrence, false);
         });
 
         actions.append(value, remove);
