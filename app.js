@@ -1216,11 +1216,13 @@ function editPlanValue(plan) {
 // ==========================================
 
 function deletePlanOccurrence(item, fromDayModal) {
-    const currentMonthKey = monthKey(selectedDate);
-    const planMonthKey = monthKey(parseDate(item.date));
+    if (!item || !item.id) {
+        alert("Não foi possível identificar a programação.");
+        return;
+    }
 
     if (item.repeat === "once") {
-        if (!confirm("Excluir esta programação?")) return;
+        if (!confirm(`Excluir a programação "${item.description}"?`)) return;
 
         plans = plans.filter(x => x.id !== item.id);
 
@@ -1247,6 +1249,15 @@ function deletePlanOccurrence(item, fromDayModal) {
         }
     } else if (escolha.trim() === "2") {
         plans = plans.filter(x => x.id !== item.id);
+
+        const currentMonthKey = monthKey(selectedDate);
+        const keysToRemove = Object.keys(planOverrides).filter(k => {
+            if (!k.startsWith(`${item.id}|`)) return false;
+            const overrideMonthKey = k.split("|")[1];
+            return overrideMonthKey >= currentMonthKey;
+        });
+
+        keysToRemove.forEach(k => delete planOverrides[k]);
     } else {
         alert("Opção inválida.");
         return;
@@ -1520,8 +1531,41 @@ function renderPlans() {
             );
 
             if (!currentOccurrence) {
-                if (!confirm("Excluir esta programação?")) return;
-                plans = plans.filter(x => x.id !== plan.id);
+                if (plan.repeat === "once") {
+                    if (!confirm(`Excluir a programação "${plan.description}"?`)) return;
+                    plans = plans.filter(x => x.id !== plan.id);
+                } else {
+                    const escolha = prompt(
+                        `Excluir "${plan.description}".\n\n` +
+                        `1 - Somente este mês (${selectedDate.toLocaleDateString("pt-BR", {month: "long", year: "numeric"})})\n` +
+                        `2 - Este mês e ocorrências futuras\n\n` +
+                        `Digite 1 ou 2:`,
+                        "1"
+                    );
+
+                    if (escolha === null) return;
+
+                    if (escolha.trim() === "1") {
+                        const monthStr = monthKey(selectedDate);
+                        const day = Math.min(
+                            parseDate(plan.date).getDate(),
+                            new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate()
+                        );
+                        const syntheticDate = localDate(
+                            new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day, 12)
+                        );
+                        const exclusion = `${plan.id}|${syntheticDate}`;
+                        if (!skippedOccurrences.includes(exclusion)) {
+                            skippedOccurrences.push(exclusion);
+                        }
+                    } else if (escolha.trim() === "2") {
+                        plans = plans.filter(x => x.id !== plan.id);
+                    } else {
+                        alert("Opção inválida.");
+                        return;
+                    }
+                }
+
                 saveData();
                 updateDashboard();
                 return;
