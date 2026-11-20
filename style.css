@@ -103,6 +103,7 @@ main {
     display: flex;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
 }
 
 .balance-details div {
@@ -337,11 +338,6 @@ select:focus {
     border-bottom: 1px solid #edf0f5;
     font-size: 11px;
     text-align: center;
-}
-
-.daily-row.today {
-    background: #eff6ff;
-    border-radius: 7px;
 }
 
 .day-cell {
@@ -652,6 +648,8 @@ footer {
     border-radius: 14px;
     background: white;
     box-shadow: 0 15px 45px rgba(0, 0, 0, .25);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .modal-card h3 {
@@ -690,4 +688,22 @@ footer {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
     margin-top: 20px;
+}
+
+.day-transaction-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #edf0f5;
+    padding: 10px 0;
+}
+
+.day-transaction-item:last-child {
+    border-bottom: none;
+}
+
+.day-transaction-item .item-value {
+    cursor: pointer;
+    text-decoration: underline dashed;
 }
