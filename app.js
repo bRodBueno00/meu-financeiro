@@ -1308,7 +1308,7 @@ function attachDatalist(inputId, datalistId) {
 }
 
 // ==========================================
-// FORMULÁRIO DE NOVO LANÇAMENTO
+// FORMULÁRIO DE NOVO LANÇAMENTO (CALENDÁRIO)
 // ==========================================
 
 function openTransactionForm(type, date) {
