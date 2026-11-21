@@ -278,27 +278,8 @@ function initGoogleAuth() {
         }
     });
 
-    restoreToken();
-}
-
-function restoreToken() {
-    try {
-        const raw = localStorage.getItem("meuFinanceiroToken");
-        if (!raw) return;
-
-        const data = JSON.parse(raw);
-
-        if (data.expiresAt && data.expiresAt > Date.now() + 60000) {
-            accessToken = data.token;
-            setCloudStatus("Drive: conectado");
-            updateCloudButtons();
-            loadFromDrive();
-        } else {
-            localStorage.removeItem("meuFinanceiroToken");
-        }
-    } catch (e) {
-        // ignora
-    }
+    // Solicita login automaticamente ao abrir o app
+    tokenClient.requestAccessToken({ prompt: "" });
 }
 
 function loginGoogle() {
@@ -922,10 +903,6 @@ function updateDashboard() {
     $("balance").textContent = money(closing);
     $("totalIncome").textContent = money(totalIncome);
     $("totalExpenses").textContent = money(totalExpenses);
-
-    $("received").textContent = money(incomeActual);
-    $("creditTotal").textContent = money(creditActual);
-    $("debitTotal").textContent = money(debitActual);
 
     $("todayBalance").textContent = money(getTodayBalance());
 
@@ -2089,6 +2066,22 @@ $("recurringMenu").addEventListener("click", event => {
 
 $("saveInitialBalance").addEventListener("click", saveInitialBalance);
 $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
+
+// ==========================================
+// BOTÕES DE CONFIGURAÇÃO (SALDO E FATURA)
+// ==========================================
+
+$("openBalanceConfig").addEventListener("click", () => {
+    $("sectionBalanceConfig").classList.remove("hidden");
+    $("sectionInvoiceConfig").classList.add("hidden");
+    $("sectionBalanceConfig").scrollIntoView({ behavior: "smooth" });
+});
+
+$("openInvoiceConfig").addEventListener("click", () => {
+    $("sectionInvoiceConfig").classList.remove("hidden");
+    $("sectionBalanceConfig").classList.add("hidden");
+    $("sectionInvoiceConfig").scrollIntoView({ behavior: "smooth" });
+});
 
 // ==========================================
 // EXPORTAÇÃO DE BACKUP
