@@ -980,3 +980,253 @@ html[data-theme="dark"] .category-dot {
         flex: 1;
     }
 }
+
+.dash-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 14px var(--shadow);
+    border: 1px solid var(--border-soft);
+}
+
+.dash-period-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dash-period-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-muted);
+}
+
+.dash-period-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.dash-shortcut {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.dash-shortcut:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.dash-shortcut.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.dash-custom-range {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.dash-custom-range label {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.dash-custom-range input {
+    margin-bottom: 0;
+}
+
+.dash-period-text {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-soft);
+    font-weight: bold;
+    text-transform: capitalize;
+}
+
+.dash-kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.dash-kpi {
+    background: var(--surface-2);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-left: 4px solid transparent;
+}
+
+.dash-kpi small {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: bold;
+}
+
+.dash-kpi strong {
+    font-size: 17px;
+    overflow-wrap: anywhere;
+}
+
+.dash-kpi-income {
+    border-left-color: var(--income-fg);
+    background: var(--income-bg);
+}
+
+.dash-kpi-income strong {
+    color: var(--income-fg);
+}
+
+.dash-kpi-debit {
+    border-left-color: var(--debit-fg);
+    background: var(--debit-bg);
+}
+
+.dash-kpi-debit strong {
+    color: var(--debit-fg);
+}
+
+.dash-kpi-invoice {
+    border-left-color: var(--credit-fg);
+    background: var(--credit-bg);
+}
+
+.dash-kpi-invoice strong {
+    color: var(--credit-fg);
+}
+
+.dash-kpi-balance {
+    border-left-color: var(--primary);
+    background: var(--invoice-bg);
+}
+
+.dash-kpi-balance strong {
+    color: var(--primary-dark);
+}
+
+.dash-compare {
+    margin-top: 8px;
+}
+
+.dash-compare-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: bold;
+}
+
+.dash-compare-header strong {
+    font-size: 14px;
+    color: var(--text);
+}
+
+.dash-compare-track {
+    width: 100%;
+    height: 12px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.dash-compare-fill {
+    height: 100%;
+    background: var(--income-fg);
+    border-radius: 6px;
+    transition: width .4s ease, background .2s ease;
+    width: 0;
+}
+
+.dash-compare-fill.warn {
+    background: #ca8a04;
+}
+
+.dash-compare-fill.danger {
+    background: var(--debit-fg);
+}
+
+.dash-projection-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    margin-top: 10px;
+}
+
+.dash-projection-controls > div {
+    flex: 1;
+}
+
+.dash-projection-controls label {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.dash-projection-controls input {
+    margin-bottom: 0;
+}
+
+.dash-projection-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dash-projection-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border-radius: 10px;
+    font-size: 13px;
+}
+
+.dash-projection-row strong {
+    text-transform: capitalize;
+    font-size: 13px;
+}
+
+.dash-projection-value {
+    font-weight: bold;
+    color: var(--income-fg);
+}
+
+.dash-projection-value.negative {
+    color: var(--debit-fg);
+}
+
+@media (max-width: 370px) {
+    .dash-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dash-custom-range {
+        grid-template-columns: 1fr;
+    }
+}
