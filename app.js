@@ -354,7 +354,7 @@ function deleteCategory(cat) {
     categories[type] = categories[type].filter(c => c.id !== cat.id);
 
     saveData();
-    updateDashboard();
+    updatePainel();
     renderCategoriesList();
 }
 
@@ -392,7 +392,7 @@ safeOn("categoryEditForm", "submit", event => {
     if (cat) cat.name = newName;
 
     saveData();
-    updateDashboard();
+    updatePainel();
     closeCategoryEditModal();
     renderCategoriesList();
 });
@@ -1194,21 +1194,26 @@ function renderDashboard() {
         let totalIncome = 0;
         let totalDebit = 0;
         let totalInvoice = 0;
+        let lastClosing = null;
 
         forEachMonthInRange(start, end, m => {
             const t = computeMonthTotals(m);
             totalIncome += t.income;
             totalDebit += t.debit;
             totalInvoice += t.invoice;
+            lastClosing = t.closing;
         });
 
-        const balance = totalIncome - totalDebit - totalInvoice;
+        if (lastClosing === null) {
+            lastClosing = getOpeningBalance(start);
+        }
+
         const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
 
         setText("dashKpiIncome", money(totalIncome));
         setText("dashKpiDebit", money(totalDebit));
         setText("dashKpiInvoice", money(totalInvoice));
-        setText("dashKpiBalance", money(balance));
+        setText("dashKpiBalance", money(lastClosing));
 
         const percent = totalIncome > 0 ? Math.min(100, Math.round((totalDebit / totalIncome) * 100)) : 0;
         setText("dashComparePercent", `${percent}%`);
