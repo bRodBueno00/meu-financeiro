@@ -1272,12 +1272,11 @@ function getFilteredExpenseEntries(range) {
         if (chartFilters.types.invoice && chartFilters.origins.oneTime) {
             const invoice = getInvoiceAmount(monthDate);
             if (invoice > 0 && transactionPassesFilter(invoice)) {
-                const invoiceCatKey = "invoice";
-                if (categoryPassesFilter(invoiceCatKey)) {
+                if (categoryPassesFilter("invoice")) {
                     entries.push({
                         monthKey: key,
                         amount: invoice,
-                        categoryId: invoiceCatKey,
+                        categoryId: "invoice",
                         categoryName: "Fatura do cartão",
                         categoryColor: "#1d4ed8",
                         description: "Fatura do cartão",
@@ -1591,7 +1590,6 @@ function renderFiltersDropdown() {
         });
     });
 
-    // Fatura como item adicional
     const title = document.createElement("div");
     title.className = "filter-subcategory-title";
     title.textContent = "Especial";
@@ -1640,10 +1638,7 @@ function updateFilterBadge() {
 safeOn("filterTypeDebit", "change", () => {
     const el = $("filterTypeDebit");
     if (!el) return;
-    if (!el.checked && !chartFilters.types.invoice) {
-        el.checked = true;
-        return;
-    }
+    if (!el.checked && !chartFilters.types.invoice) { el.checked = true; return; }
     chartFilters.types.debit = el.checked;
     renderDashboard();
 });
@@ -1651,10 +1646,7 @@ safeOn("filterTypeDebit", "change", () => {
 safeOn("filterTypeInvoice", "change", () => {
     const el = $("filterTypeInvoice");
     if (!el) return;
-    if (!el.checked && !chartFilters.types.debit) {
-        el.checked = true;
-        return;
-    }
+    if (!el.checked && !chartFilters.types.debit) { el.checked = true; return; }
     chartFilters.types.invoice = el.checked;
     renderDashboard();
 });
@@ -1662,10 +1654,7 @@ safeOn("filterTypeInvoice", "change", () => {
 safeOn("filterOriginOneTime", "change", () => {
     const el = $("filterOriginOneTime");
     if (!el) return;
-    if (!el.checked && !chartFilters.origins.recurring) {
-        el.checked = true;
-        return;
-    }
+    if (!el.checked && !chartFilters.origins.recurring) { el.checked = true; return; }
     chartFilters.origins.oneTime = el.checked;
     renderDashboard();
 });
@@ -1673,10 +1662,7 @@ safeOn("filterOriginOneTime", "change", () => {
 safeOn("filterOriginRecurring", "change", () => {
     const el = $("filterOriginRecurring");
     if (!el) return;
-    if (!el.checked && !chartFilters.origins.oneTime) {
-        el.checked = true;
-        return;
-    }
+    if (!el.checked && !chartFilters.origins.oneTime) { el.checked = true; return; }
     chartFilters.origins.recurring = el.checked;
     renderDashboard();
 });
