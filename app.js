@@ -2582,3 +2582,43 @@ updateCloudButtons();
 setCalendarSectionOpen(false);
 setBackupSectionOpen(false);
 initGoogleAuth();
+
+// ==========================================
+// TEMA CLARO / ESCURO
+// ==========================================
+
+(function initTheme() {
+    const STORAGE_KEY = "meuFinanceiroTheme";
+    const root = document.documentElement;
+    const btn = document.getElementById("themeToggle");
+    const icon = document.getElementById("themeToggleIcon");
+
+    function getSystemTheme() {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function applyTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", theme === "dark" ? "#060b14" : "#101827");
+    }
+
+    const saved = localStorage.getItem(STORAGE_KEY);
+    applyTheme(saved === "dark" || saved === "light" ? saved : getSystemTheme());
+
+    if (btn) {
+        btn.addEventListener("click", () => {
+            const current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+            const next = current === "dark" ? "light" : "dark";
+            applyTheme(next);
+            localStorage.setItem(STORAGE_KEY, next);
+        });
+    }
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+        if (!localStorage.getItem(STORAGE_KEY)) {
+            applyTheme(e.matches ? "dark" : "light");
+        }
+    });
+})();
