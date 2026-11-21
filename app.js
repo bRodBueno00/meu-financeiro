@@ -1,8 +1,5 @@
 const STORAGE_KEY = "meuFinanceiroDados_v2";
 
-// ==========================================
-// CONFIGURAÇÃO GOOGLE DRIVE
-// ==========================================
 const CLIENT_ID = "127934343018-kpdvptdrvp8ov899cjii6okrmv2u17d2.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "MeuFinanceiro";
@@ -43,16 +40,17 @@ let pendingCategoryTarget = null;
 
 let calendarSectionOpen = false;
 let backupSectionOpen = false;
-let filtersSectionOpen = false;
 let currentView = "painel";
 
 let dashPeriod = { months: 12 };
 let dashProjectionMonths = 6;
 let projectionSectionOpen = false;
+let filtersDropdownOpen = false;
 
 let chartFilters = {
     types: { debit: true, invoice: true },
     origins: { oneTime: true, recurring: true },
+    categoryKeys: new Set(),
     minValue: null,
     maxValue: null
 };
@@ -251,6 +249,7 @@ safeOn("newCategoryForm", "submit", event => {
     saveData();
     populateCategorySelect(pendingCategoryTarget.selectId, type, newCat.id);
     closeNewCategoryModal();
+    renderFiltersDropdown();
 });
 
 function openCategoriesListForType(type) {
@@ -372,10 +371,12 @@ function deleteCategory(cat) {
     }
 
     categories[type] = categories[type].filter(c => c.id !== cat.id);
+    chartFilters.categoryKeys.delete(cat.id);
 
     saveData();
     updatePainel();
     renderCategoriesList();
+    renderFiltersDropdown();
 }
 
 safeOn("closeCategoriesListModal", "click", closeCategoriesListModal);
@@ -415,6 +416,7 @@ safeOn("categoryEditForm", "submit", event => {
     updatePainel();
     closeCategoryEditModal();
     renderCategoriesList();
+    renderFiltersDropdown();
 });
 
 document.addEventListener("click", event => {
@@ -1217,58 +1219,72 @@ function transactionPassesFilter(amount) {
     return true;
 }
 
+function categoryPassesFilter(categoryId) {
+    if (chartFilters.categoryKeys.size === 0) return true;
+    return chartFilters.categoryKeys.has(categoryId);
+}
+
 function getFilteredExpenseEntries(range) {
     const entries = [];
 
     forEachMonthInRange(range.start, range.end, monthDate => {
         const key = monthKey(monthDate);
 
-        transactions.forEach(t => {
-            if (t.type !== "debit") return;
-            if (!t.date.startsWith(key)) return;
-            if (!chartFilters.types.debit) return;
-            if (!chartFilters.origins.oneTime) return;
-            if (!transactionPassesFilter(t.amount)) return;
+        if (chartFilters.types.debit && chartFilters.origins.oneTime) {
+            transactions.forEach(t => {
+                if (t.type !== "debit") return;
+                if (!t.date.startsWith(key)) return;
+                if (!transactionPassesFilter(t.amount)) return;
+                const cid = normalizeCategoryId("debit", t.categoryId);
+                if (!categoryPassesFilter(cid)) return;
 
-            entries.push({
-                monthKey: key,
-                amount: t.amount,
-                categoryId: normalizeCategoryId("debit", t.categoryId),
-                categoryName: getCategoryName("debit", t.categoryId),
-                categoryColor: getCategoryColor("debit", t.categoryId),
-                description: t.description || "Sem descrição",
-                recurring: false
+                entries.push({
+                    monthKey: key,
+                    amount: t.amount,
+                    categoryId: cid,
+                    categoryName: getCategoryName("debit", cid),
+                    categoryColor: getCategoryColor("debit", cid),
+                    description: t.description || "Sem descrição",
+                    recurring: false
+                });
             });
-        });
+        }
 
-        getOccurrencesForMonth(monthDate).forEach(r => {
-            if (r.type !== "debit") return;
-            if (!chartFilters.types.debit) return;
-            if (!chartFilters.origins.recurring) return;
-            if (!transactionPassesFilter(r.amount)) return;
+        if (chartFilters.types.debit && chartFilters.origins.recurring) {
+            getOccurrencesForMonth(monthDate).forEach(r => {
+                if (r.type !== "debit") return;
+                if (!transactionPassesFilter(r.amount)) return;
+                const cid = normalizeCategoryId("debit", r.categoryId);
+                if (!categoryPassesFilter(cid)) return;
 
-            entries.push({
-                monthKey: key,
-                amount: r.amount,
-                categoryId: normalizeCategoryId("debit", r.categoryId),
-                categoryName: getCategoryName("debit", r.categoryId),
-                categoryColor: getCategoryColor("debit", r.categoryId),
-                description: r.description || "Sem descrição",
-                recurring: true
+                entries.push({
+                    monthKey: key,
+                    amount: r.amount,
+                    categoryId: cid,
+                    categoryName: getCategoryName("debit", cid),
+                    categoryColor: getCategoryColor("debit", cid),
+                    description: r.description || "Sem descrição",
+                    recurring: true
+                });
             });
-        });
+        }
 
-        const invoice = getInvoiceAmount(monthDate);
-        if (invoice > 0 && chartFilters.types.invoice && chartFilters.origins.oneTime && transactionPassesFilter(invoice)) {
-            entries.push({
-                monthKey: key,
-                amount: invoice,
-                categoryId: "invoice",
-                categoryName: "Fatura do cartão",
-                categoryColor: "#1d4ed8",
-                description: "Fatura do cartão",
-                recurring: false
-            });
+        if (chartFilters.types.invoice && chartFilters.origins.oneTime) {
+            const invoice = getInvoiceAmount(monthDate);
+            if (invoice > 0 && transactionPassesFilter(invoice)) {
+                const invoiceCatKey = "invoice";
+                if (categoryPassesFilter(invoiceCatKey)) {
+                    entries.push({
+                        monthKey: key,
+                        amount: invoice,
+                        categoryId: invoiceCatKey,
+                        categoryName: "Fatura do cartão",
+                        categoryColor: "#1d4ed8",
+                        description: "Fatura do cartão",
+                        recurring: false
+                    });
+                }
+            }
         }
     });
 
@@ -1380,6 +1396,7 @@ function renderDashboard() {
         renderTopLists(range);
         renderProjection();
         updateDashShortcutButtons();
+        updateFilterBadge();
     } catch (error) {
         console.error("Erro ao renderizar dashboard:", error);
     }
@@ -1511,81 +1528,215 @@ function bindDashShortcuts() {
 // FILTROS — UI
 // ==========================================
 
-function updateFilterChipsUI() {
-    document.querySelectorAll("[data-filter-type]").forEach(btn => {
-        const t = btn.getAttribute("data-filter-type");
-        btn.classList.toggle("active", !!chartFilters.types[t]);
+function getAvailableFilterCategories() {
+    const list = [];
+    ["debit", "credit"].forEach(type => {
+        (categories[type] || []).forEach(cat => {
+            if (cat.id === OUTROS_ID) return;
+            list.push({ type, id: cat.id, name: cat.name, color: cat.color });
+        });
     });
-    document.querySelectorAll("[data-filter-origin]").forEach(btn => {
-        const o = btn.getAttribute("data-filter-origin");
-        btn.classList.toggle("active", !!chartFilters.origins[o]);
-    });
+    return list;
 }
 
-function bindFilters() {
-    document.querySelectorAll("[data-filter-type]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const t = btn.getAttribute("data-filter-type");
-            const next = !chartFilters.types[t];
-            const others = Object.keys(chartFilters.types).filter(k => k !== t);
-            if (!next && others.every(k => !chartFilters.types[k])) return;
-            chartFilters.types[t] = next;
-            updateFilterChipsUI();
-            renderDashboard();
+function renderFiltersDropdown() {
+    const container = $("filterCategoriesList");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const list = getAvailableFilterCategories();
+
+    if (list.length === 0) {
+        const p = document.createElement("p");
+        p.className = "helper";
+        p.textContent = "Nenhuma categoria cadastrada ainda.";
+        container.appendChild(p);
+        return;
+    }
+
+    const groups = { debit: "Débito", credit: "Crédito" };
+
+    Object.keys(groups).forEach(type => {
+        const groupItems = list.filter(c => c.type === type);
+        if (groupItems.length === 0) return;
+
+        const title = document.createElement("div");
+        title.className = "filter-subcategory-title";
+        title.textContent = groups[type];
+        container.appendChild(title);
+
+        groupItems.forEach(cat => {
+            const label = document.createElement("label");
+            label.className = "filter-check-item";
+
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.checked = chartFilters.categoryKeys.has(cat.id);
+            input.addEventListener("change", () => {
+                if (input.checked) chartFilters.categoryKeys.add(cat.id);
+                else chartFilters.categoryKeys.delete(cat.id);
+                renderDashboard();
+            });
+
+            const dot = document.createElement("span");
+            dot.className = "filter-cat-dot";
+            dot.style.background = cat.color;
+
+            const name = document.createElement("span");
+            name.textContent = cat.name;
+
+            label.append(input, dot, name);
+            container.appendChild(label);
         });
     });
 
-    document.querySelectorAll("[data-filter-origin]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const o = btn.getAttribute("data-filter-origin");
-            const next = !chartFilters.origins[o];
-            const others = Object.keys(chartFilters.origins).filter(k => k !== o);
-            if (!next && others.every(k => !chartFilters.origins[k])) return;
-            chartFilters.origins[o] = next;
-            updateFilterChipsUI();
-            renderDashboard();
-        });
-    });
+    // Fatura como item adicional
+    const title = document.createElement("div");
+    title.className = "filter-subcategory-title";
+    title.textContent = "Especial";
+    container.appendChild(title);
 
-    safeOn("filterMinValue", "input", () => {
-        const el = $("filterMinValue");
-        if (!el) return;
-        const v = parseFloat(el.value.replace(",", "."));
-        chartFilters.minValue = Number.isFinite(v) && v >= 0 ? v : null;
+    const invLabel = document.createElement("label");
+    invLabel.className = "filter-check-item";
+
+    const invInput = document.createElement("input");
+    invInput.type = "checkbox";
+    invInput.checked = chartFilters.categoryKeys.has("invoice");
+    invInput.addEventListener("change", () => {
+        if (invInput.checked) chartFilters.categoryKeys.add("invoice");
+        else chartFilters.categoryKeys.delete("invoice");
         renderDashboard();
     });
 
-    safeOn("filterMaxValue", "input", () => {
-        const el = $("filterMaxValue");
-        if (!el) return;
-        const v = parseFloat(el.value.replace(",", "."));
-        chartFilters.maxValue = Number.isFinite(v) && v > 0 ? v : null;
-        renderDashboard();
-    });
+    const invDot = document.createElement("span");
+    invDot.className = "filter-cat-dot";
+    invDot.style.background = "#1d4ed8";
 
-    safeOn("clearFiltersButton", "click", () => {
-        chartFilters = {
-            types: { debit: true, invoice: true },
-            origins: { oneTime: true, recurring: true },
-            minValue: null,
-            maxValue: null
-        };
-        const minEl = $("filterMinValue");
-        if (minEl) minEl.value = "";
-        const maxEl = $("filterMaxValue");
-        if (maxEl) maxEl.value = "";
-        updateFilterChipsUI();
-        renderDashboard();
-    });
+    const invName = document.createElement("span");
+    invName.textContent = "Fatura do cartão";
 
-    safeOn("toggleFiltersButton", "click", () => {
-        filtersSectionOpen = !filtersSectionOpen;
-        const section = $("filtersSection");
-        if (section) section.classList.toggle("hidden", !filtersSectionOpen);
-        const icon = $("toggleFiltersIcon");
-        if (icon) icon.textContent = filtersSectionOpen ? "▾" : "▸";
-    });
+    invLabel.append(invInput, invDot, invName);
+    container.appendChild(invLabel);
 }
+
+function updateFilterBadge() {
+    const badge = $("dashFilterBadge");
+    if (!badge) return;
+
+    let count = 0;
+    if (!chartFilters.types.debit) count++;
+    if (!chartFilters.types.invoice) count++;
+    if (!chartFilters.origins.oneTime) count++;
+    if (!chartFilters.origins.recurring) count++;
+    if (chartFilters.categoryKeys.size > 0) count++;
+    if (chartFilters.minValue !== null) count++;
+    if (chartFilters.maxValue !== null) count++;
+
+    badge.textContent = String(count);
+    badge.classList.toggle("hidden", count === 0);
+}
+
+safeOn("filterTypeDebit", "change", () => {
+    const el = $("filterTypeDebit");
+    if (!el) return;
+    if (!el.checked && !chartFilters.types.invoice) {
+        el.checked = true;
+        return;
+    }
+    chartFilters.types.debit = el.checked;
+    renderDashboard();
+});
+
+safeOn("filterTypeInvoice", "change", () => {
+    const el = $("filterTypeInvoice");
+    if (!el) return;
+    if (!el.checked && !chartFilters.types.debit) {
+        el.checked = true;
+        return;
+    }
+    chartFilters.types.invoice = el.checked;
+    renderDashboard();
+});
+
+safeOn("filterOriginOneTime", "change", () => {
+    const el = $("filterOriginOneTime");
+    if (!el) return;
+    if (!el.checked && !chartFilters.origins.recurring) {
+        el.checked = true;
+        return;
+    }
+    chartFilters.origins.oneTime = el.checked;
+    renderDashboard();
+});
+
+safeOn("filterOriginRecurring", "change", () => {
+    const el = $("filterOriginRecurring");
+    if (!el) return;
+    if (!el.checked && !chartFilters.origins.oneTime) {
+        el.checked = true;
+        return;
+    }
+    chartFilters.origins.recurring = el.checked;
+    renderDashboard();
+});
+
+safeOn("filterMinValue", "input", () => {
+    const el = $("filterMinValue");
+    if (!el) return;
+    const v = parseFloat(el.value.replace(",", "."));
+    chartFilters.minValue = Number.isFinite(v) && v >= 0 ? v : null;
+    renderDashboard();
+});
+
+safeOn("filterMaxValue", "input", () => {
+    const el = $("filterMaxValue");
+    if (!el) return;
+    const v = parseFloat(el.value.replace(",", "."));
+    chartFilters.maxValue = Number.isFinite(v) && v > 0 ? v : null;
+    renderDashboard();
+});
+
+safeOn("toggleFiltersButton", "click", () => {
+    filtersDropdownOpen = !filtersDropdownOpen;
+    const dd = $("filtersDropdown");
+    if (dd) dd.classList.toggle("hidden", !filtersDropdownOpen);
+    const icon = $("toggleFiltersIcon");
+    if (icon) icon.textContent = filtersDropdownOpen ? "▴" : "▾";
+    if (filtersDropdownOpen) renderFiltersDropdown();
+});
+
+document.querySelectorAll("[data-cat-action]").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-cat-action");
+        if (action === "all") {
+            getAvailableFilterCategories().forEach(c => chartFilters.categoryKeys.add(c.id));
+            chartFilters.categoryKeys.add("invoice");
+        } else {
+            chartFilters.categoryKeys.clear();
+        }
+        renderFiltersDropdown();
+        renderDashboard();
+    });
+});
+
+safeOn("clearFiltersButton", "click", () => {
+    chartFilters = {
+        types: { debit: true, invoice: true },
+        origins: { oneTime: true, recurring: true },
+        categoryKeys: new Set(),
+        minValue: null,
+        maxValue: null
+    };
+    const minEl = $("filterMinValue"); if (minEl) minEl.value = "";
+    const maxEl = $("filterMaxValue"); if (maxEl) maxEl.value = "";
+    const fd = $("filterTypeDebit"); if (fd) fd.checked = true;
+    const fi = $("filterTypeInvoice"); if (fi) fi.checked = true;
+    const oo = $("filterOriginOneTime"); if (oo) oo.checked = true;
+    const or = $("filterOriginRecurring"); if (or) or.checked = true;
+    renderFiltersDropdown();
+    renderDashboard();
+});
 
 // ==========================================
 // CHARTS — HELPERS
@@ -1646,7 +1797,7 @@ function setupCanvas(canvas) {
 }
 
 // ==========================================
-// CHART — BARRAS (Entradas × Saídas)
+// CHART — BARRAS
 // ==========================================
 
 function drawBarsChart() {
@@ -1657,15 +1808,24 @@ function drawBarsChart() {
 
     ctx.clearRect(0, 0, width, height);
 
-    const { start, end } = getDashRange();
+    const range = getDashRange();
     const months = [];
-    forEachMonthInRange(start, end, m => {
+    const filteredEntries = getFilteredExpenseEntries(range);
+
+    const filteredByMonth = new Map();
+    filteredEntries.forEach(e => {
+        if (!filteredByMonth.has(e.monthKey)) filteredByMonth.set(e.monthKey, 0);
+        filteredByMonth.set(e.monthKey, filteredByMonth.get(e.monthKey) + e.amount);
+    });
+
+    forEachMonthInRange(range.start, range.end, m => {
+        const key = monthKey(m);
         const t = computeMonthTotals(m);
         months.push({
             label: m.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
             monthDate: m,
             income: t.income,
-            debit: t.debit + t.invoice
+            debit: filteredByMonth.get(key) || 0
         });
     });
 
@@ -1688,12 +1848,10 @@ function drawBarsChart() {
     const maxVal = Math.max(...months.map(m => Math.max(m.income, m.debit)), 1);
     const yScale = chartH / maxVal;
 
-    // Grid
     ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1;
-    const gridLines = 3;
-    for (let i = 0; i <= gridLines; i++) {
-        const y = padT + (chartH / gridLines) * i;
+    for (let i = 0; i <= 3; i++) {
+        const y = padT + (chartH / 3) * i;
         ctx.beginPath();
         ctx.moveTo(padL, y);
         ctx.lineTo(width - padR, y);
@@ -1728,7 +1886,6 @@ function drawBarsChart() {
             bars.push({ kind: "debit", x: debX, y: baseY - debH, w: barW, h: debH, month: m });
         }
 
-        // X label
         const showEvery = months.length > 8 ? 2 : 1;
         if (i % showEvery === 0 || i === months.length - 1) {
             ctx.fillStyle = colors.text;
@@ -1782,7 +1939,7 @@ function bindBarsChart() {
 }
 
 // ==========================================
-// CHART — LINHA (Saldo)
+// CHART — LINHA
 // ==========================================
 
 function drawLineChart() {
@@ -1793,9 +1950,9 @@ function drawLineChart() {
 
     ctx.clearRect(0, 0, width, height);
 
-    const { start, end } = getDashRange();
+    const range = getDashRange();
     const months = [];
-    forEachMonthInRange(start, end, m => {
+    forEachMonthInRange(range.start, range.end, m => {
         const t = computeMonthTotals(m);
         months.push({
             label: m.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
@@ -1831,7 +1988,6 @@ function drawLineChart() {
         return padT + chartH - ((v - minV) / span) * chartH;
     }
 
-    // Zero line if crosses
     if (minV < 0 && maxV > 0) {
         const y0 = yFor(0);
         ctx.strokeStyle = colors.grid;
@@ -1843,7 +1999,6 @@ function drawLineChart() {
         ctx.setLineDash([]);
     }
 
-    // Grid
     ctx.strokeStyle = colors.grid;
     for (let i = 0; i <= 3; i++) {
         const y = padT + (chartH / 3) * i;
@@ -1859,7 +2014,6 @@ function drawLineChart() {
         month: m
     }));
 
-    // Area
     if (points.length > 0) {
         ctx.beginPath();
         ctx.moveTo(points[0].x, padT + chartH);
@@ -1870,7 +2024,6 @@ function drawLineChart() {
         ctx.fill();
     }
 
-    // Line
     ctx.strokeStyle = colors.line;
     ctx.lineWidth = 2;
     ctx.lineJoin = "round";
@@ -1881,7 +2034,6 @@ function drawLineChart() {
     });
     ctx.stroke();
 
-    // Points
     points.forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
@@ -1892,7 +2044,6 @@ function drawLineChart() {
         ctx.stroke();
     });
 
-    // X labels
     const showEvery = months.length > 8 ? 2 : 1;
     months.forEach((m, i) => {
         if (i % showEvery !== 0 && i !== months.length - 1) return;
@@ -1944,10 +2095,6 @@ function bindLineChart() {
     });
 }
 
-// ==========================================
-// RENDER CHARTS
-// ==========================================
-
 function renderCharts() {
     drawBarsChart();
     drawLineChart();
@@ -1998,11 +2145,8 @@ function renderTopLists(range) {
                 item.append(dot, name, value);
 
                 item.addEventListener("click", () => {
-                    if (selectedCategoryKey === c.key) {
-                        selectedCategoryKey = null;
-                    } else {
-                        selectedCategoryKey = c.key;
-                    }
+                    if (selectedCategoryKey === c.key) selectedCategoryKey = null;
+                    else selectedCategoryKey = c.key;
                     renderTopLists(getDashRange());
                 });
 
@@ -2047,8 +2191,7 @@ function renderTopLists(range) {
 
     if (descTitle) {
         const catName = selectedCategoryKey
-            ? (byCat.find(c => c.key === selectedCategoryKey)?.name
-                || aggregateByCategory(entries).find(c => c.key === selectedCategoryKey)?.name)
+            ? (aggregateByCategory(entries).find(c => c.key === selectedCategoryKey)?.name || null)
             : null;
 
         descTitle.textContent = catName
@@ -3055,7 +3198,7 @@ let touchStartX = 0, touchStartY = 0, touchTracking = false;
 function isInteractiveTarget(target) {
     if (!target) return false;
     return !!target.closest(
-        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row, .dash-sticky, canvas, .chart-wrapper, .dash-top-item"
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row, .dash-sticky, canvas, .chart-wrapper, .dash-top-item, .filter-check-item, .filter-mini-btn"
     );
 }
 
@@ -3405,8 +3548,8 @@ populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 
 bindDashShortcuts();
-bindFilters();
-updateFilterChipsUI();
+renderFiltersDropdown();
+updateFilterBadge();
 
 updatePainel();
 renderDashboard();
