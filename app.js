@@ -1987,14 +1987,18 @@ $("goToCurrentMonth").addEventListener("click", () => {
 
 function setCalendarSectionOpen(open) {
     calendarSectionOpen = open;
-    $("calendarSection").classList.toggle("hidden", !open);
-    $("toggleCalendarIcon").textContent = open ? "▾" : "▸";
+    const section = $("calendarSection");
+    if (section) section.classList.toggle("hidden", !open);
+    const icon = $("toggleCalendarIcon");
+    if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
 function setTransactionsSectionOpen(open) {
     transactionsSectionOpen = open;
-    $("transactionsSection").classList.toggle("hidden", !open);
-    $("toggleTransactionsIcon").textContent = open ? "▾" : "▸";
+    const section = $("transactionsSection");
+    if (section) section.classList.toggle("hidden", !open);
+    const icon = $("toggleTransactionsIcon");
+    if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
 $("toggleCalendarButton").addEventListener("click", () => {
