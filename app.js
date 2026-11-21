@@ -31,7 +31,7 @@ let pendingTransactionDate = null;
 
 let editingRecurringId = null;
 
-let recurringView = "income"; // "income" | "expense"
+let currentRecurringType = "income"; // "income" | "credit" | "debit"
 
 const $ = id => document.getElementById(id);
 
@@ -1513,69 +1513,67 @@ function renderTransactions(items) {
 // MENU DE LANÇAMENTOS RECORRENTES
 // ==========================================
 
-function setRecurringView(view) {
-    recurringView = view;
-
-    $("showIncomeButton").classList.toggle("active", view === "income");
-    $("showExpenseButton").classList.toggle("active", view === "expense");
-
-    $("recurringIncomeSection").classList.toggle("hidden", view !== "income");
-    $("recurringExpenseSection").classList.toggle("hidden", view !== "expense");
-}
-
 function openRecurringMenu() {
     $("recurringMenu").classList.remove("hidden");
-    $("recurringFormContainer").classList.add("hidden");
-    renderRecurringList();
-    setRecurringView(recurringView || "income");
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
+    $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
 }
 
 function closeRecurringMenu() {
     $("recurringMenu").classList.add("hidden");
 }
 
-function renderRecurringList() {
-    const incomesContainer = $("recurringIncomeList");
-    const expensesContainer = $("recurringExpenseList");
+function openRecurringList(type) {
+    currentRecurringType = type;
 
-    incomesContainer.innerHTML = "";
-    expensesContainer.innerHTML = "";
+    const labels = {
+        income: "Entradas recorrentes",
+        credit: "Saídas no crédito recorrentes",
+        debit: "Saídas no débito recorrentes"
+    };
+
+    $("recurringListTitle").textContent = labels[type];
 
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
+    $("recurringListMonthLabel").textContent = `Válidos em ${monthLabel}`;
 
-    $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
+    $("recurringFormContainer").classList.add("hidden");
+    $("recurringListModal").classList.remove("hidden");
+
+    renderRecurringList();
+}
+
+function closeRecurringListModal() {
+    $("recurringListModal").classList.add("hidden");
+    $("recurringFormContainer").classList.add("hidden");
+}
+
+function renderRecurringList() {
+    const container = $("recurringListContainer");
+    container.innerHTML = "";
 
     const activeItems = recurring.filter(item =>
+        item.type === currentRecurringType &&
         recurringIsActiveInMonth(item, selectedDate)
     );
 
-    const incomes = activeItems.filter(item => item.type === "income");
-    const expenses = activeItems.filter(item => item.type !== "income");
-
-    if (incomes.length === 0) {
+    if (activeItems.length === 0) {
         const empty = document.createElement("p");
         empty.className = "empty-message";
-        empty.textContent = "Nenhuma entrada recorrente válida para este mês.";
-        incomesContainer.appendChild(empty);
-    } else {
-        incomes.forEach(item => {
-            incomesContainer.appendChild(buildRecurringRow(item));
-        });
+        empty.textContent = "Nenhum lançamento recorrente válido para este mês.";
+        container.appendChild(empty);
+        return;
     }
 
-    if (expenses.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "empty-message";
-        empty.textContent = "Nenhuma saída recorrente válida para este mês.";
-        expensesContainer.appendChild(empty);
-    } else {
-        expenses.forEach(item => {
-            expensesContainer.appendChild(buildRecurringRow(item));
-        });
-    }
+    activeItems.forEach(item => {
+        container.appendChild(buildRecurringRow(item));
+    });
 }
 
 function getActiveVersionDisplay(item) {
@@ -1833,8 +1831,9 @@ $("recurringEditForm").addEventListener("submit", event => {
 $("openRecurringMenu").addEventListener("click", openRecurringMenu);
 $("closeRecurringMenu").addEventListener("click", closeRecurringMenu);
 
-$("showIncomeButton").addEventListener("click", () => setRecurringView("income"));
-$("showExpenseButton").addEventListener("click", () => setRecurringView("expense"));
+$("openIncomeRecurring").addEventListener("click", () => openRecurringList("income"));
+$("openCreditRecurring").addEventListener("click", () => openRecurringList("credit"));
+$("openDebitRecurring").addEventListener("click", () => openRecurringList("debit"));
 
 $("openRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.remove("hidden");
@@ -1849,12 +1848,17 @@ $("closeRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.add("hidden");
 });
 
+$("closeRecurringListModal").addEventListener("click", closeRecurringListModal);
+
+$("recurringListModal").addEventListener("click", event => {
+    if (event.target === $("recurringListModal")) closeRecurringListModal();
+});
+
 $("recurringForm").addEventListener("submit", event => {
     event.preventDefault();
 
     const description = $("recurringDescription").value.trim();
     const amount = Number($("recurringAmount").value);
-    const type = $("recurringType").value;
     const startDate = $("recurringStart").value;
     const frequency = $("recurringFrequency").value;
 
@@ -1868,7 +1872,7 @@ $("recurringForm").addEventListener("submit", event => {
     recurring.push({
         id: makeId(),
         description,
-        type,
+        type: currentRecurringType,
         frequency,
         dayOfMonth: parseDate(startDate).getDate(),
         versions: [
@@ -1906,7 +1910,7 @@ $("prevMonth").addEventListener("click", () => {
     );
     updateDashboard();
 
-    if (!$("recurringMenu").classList.contains("hidden")) {
+    if (!$("recurringListModal").classList.contains("hidden")) {
         renderRecurringList();
     }
 });
@@ -1920,7 +1924,7 @@ $("nextMonth").addEventListener("click", () => {
     );
     updateDashboard();
 
-    if (!$("recurringMenu").classList.contains("hidden")) {
+    if (!$("recurringListModal").classList.contains("hidden")) {
         renderRecurringList();
     }
 });
@@ -1930,7 +1934,7 @@ $("goToCurrentMonth").addEventListener("click", () => {
     selectedDate = new Date(now.getFullYear(), now.getMonth(), 1, 12);
     updateDashboard();
 
-    if (!$("recurringMenu").classList.contains("hidden")) {
+    if (!$("recurringListModal").classList.contains("hidden")) {
         renderRecurringList();
     }
 });
@@ -1994,6 +1998,7 @@ function confirmSelectedDeletion() {
 
         $("backupMessage").textContent = "";
         $("recurringMenu").classList.add("hidden");
+        $("recurringListModal").classList.add("hidden");
         $("recurringFormContainer").classList.add("hidden");
 
         selectedDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12);
