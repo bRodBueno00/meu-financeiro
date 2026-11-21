@@ -95,21 +95,28 @@
         </div>
 
         <p class="helper">
-            O botão de exclusão de cada dia remove somente os lançamentos manuais daquele dia. Os lançamentos recorrentes são preservados.
+            Toque em qualquer valor para lançar ou gerenciar lançamentos do dia.
         </p>
     </section>
 
     <section class="section">
-        <div class="section-title">
-            <h3>Lançamentos do mês</h3>
-            <span id="transactionCount">0 registros</span>
+        <button id="toggleTransactionsButton" class="expand-button" type="button">
+            <span>Lançamentos do mês</span>
+            <span id="toggleTransactionsIcon">▸</span>
+        </button>
+
+        <div id="transactionsSection" class="hidden">
+            <div class="section-title" style="margin-top:14px">
+                <h3>Lançamentos do mês</h3>
+                <span id="transactionCount">0 registros</span>
+            </div>
+
+            <div id="transactionList"></div>
+
+            <p id="emptyMessage" class="empty-message">
+                Nenhum lançamento neste mês.
+            </p>
         </div>
-
-        <div id="transactionList"></div>
-
-        <p id="emptyMessage" class="empty-message">
-            Nenhum lançamento neste mês.
-        </p>
     </section>
 
     <section class="section backup-section">
