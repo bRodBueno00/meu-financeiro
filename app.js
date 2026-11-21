@@ -2194,6 +2194,66 @@ $("goToCurrentMonth").addEventListener("click", () => {
 });
 
 // ==========================================
+// SWIPE ENTRE MESES
+// ==========================================
+
+let touchStartX = 0;
+let touchStartY = 0;
+let touchTracking = false;
+
+function isInteractiveTarget(target) {
+    if (!target) return false;
+    return !!target.closest(
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector"
+    );
+}
+
+const swipeArea = $("mainContent");
+
+if (swipeArea) {
+    swipeArea.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) {
+            touchTracking = false;
+            return;
+        }
+
+        if (isInteractiveTarget(e.target)) {
+            touchTracking = false;
+            return;
+        }
+
+        touchTracking = true;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    swipeArea.addEventListener("touchend", (e) => {
+        if (!touchTracking) return;
+        touchTracking = false;
+
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+
+        const deltaX = touch.clientX - touchStartX;
+        const deltaY = touch.clientY - touchStartY;
+
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+
+        const minDistance = 60;
+
+        if (absX < minDistance) return;
+        if (absX < absY * 1.4) return;
+
+        if (deltaX < 0) {
+            navigateMonth(1);
+        } else {
+            navigateMonth(-1);
+        }
+    }, { passive: true });
+}
+
+// ==========================================
 // EXPANDIR/RECOLHER SEÇÕES
 // ==========================================
 
