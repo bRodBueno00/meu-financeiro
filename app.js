@@ -31,6 +31,8 @@ let pendingTransactionDate = null;
 
 let editingRecurringId = null;
 
+let recurringView = "income"; // "income" | "expense"
+
 const $ = id => document.getElementById(id);
 
 const money = value => Number(value || 0).toLocaleString("pt-BR", {
@@ -881,10 +883,6 @@ function updateDashboard() {
         .filter(x => x.type === "debit")
         .reduce((sum, x) => sum + x.amount, 0);
 
-    const creditActual = actual
-        .filter(x => x.type === "credit")
-        .reduce((sum, x) => sum + x.amount, 0);
-
     const incomePlanned = scheduled
         .filter(x => x.type === "income")
         .reduce((sum, x) => sum + x.amount, 0);
@@ -911,6 +909,18 @@ function updateDashboard() {
             month: "long",
             year: "numeric"
         });
+
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
+
+    if ($("balanceConfigMonthLabel")) {
+        $("balanceConfigMonthLabel").textContent = `Mês de configuração: ${monthLabel}`;
+    }
+    if ($("invoiceConfigMonthLabel")) {
+        $("invoiceConfigMonthLabel").textContent = `Mês de configuração: ${monthLabel}`;
+    }
 
     $("initialBalance").value = opening.toFixed(2);
 
@@ -1503,9 +1513,20 @@ function renderTransactions(items) {
 // MENU DE LANÇAMENTOS RECORRENTES
 // ==========================================
 
+function setRecurringView(view) {
+    recurringView = view;
+
+    $("showIncomeButton").classList.toggle("active", view === "income");
+    $("showExpenseButton").classList.toggle("active", view === "expense");
+
+    $("recurringIncomeSection").classList.toggle("hidden", view !== "income");
+    $("recurringExpenseSection").classList.toggle("hidden", view !== "expense");
+}
+
 function openRecurringMenu() {
     $("recurringMenu").classList.remove("hidden");
     $("recurringFormContainer").classList.add("hidden");
+    setRecurringView(recurringView || "income");
     renderRecurringList();
 }
 
@@ -1593,7 +1614,8 @@ function buildRecurringRow(item) {
 
     const value = document.createElement("span");
     value.className = "item-value " +
-        (item.type === "income" ? "green" : "red");
+        (item.type === "income" ? "green" :
+         item.type === "credit" ? "blue" : "red");
     value.textContent =
         `${item.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
 
@@ -1810,6 +1832,9 @@ $("recurringEditForm").addEventListener("submit", event => {
 
 $("openRecurringMenu").addEventListener("click", openRecurringMenu);
 $("closeRecurringMenu").addEventListener("click", closeRecurringMenu);
+
+$("showIncomeButton").addEventListener("click", () => setRecurringView("income"));
+$("showExpenseButton").addEventListener("click", () => setRecurringView("expense"));
 
 $("openRecurringForm").addEventListener("click", () => {
     $("recurringFormContainer").classList.remove("hidden");
@@ -2072,15 +2097,33 @@ $("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
 // ==========================================
 
 $("openBalanceConfig").addEventListener("click", () => {
-    $("sectionBalanceConfig").classList.remove("hidden");
-    $("sectionInvoiceConfig").classList.add("hidden");
-    $("sectionBalanceConfig").scrollIntoView({ behavior: "smooth" });
+    updateDashboard();
+    $("balanceConfigModal").classList.remove("hidden");
+});
+
+$("closeBalanceConfig").addEventListener("click", () => {
+    $("balanceConfigModal").classList.add("hidden");
+});
+
+$("balanceConfigModal").addEventListener("click", event => {
+    if (event.target === $("balanceConfigModal")) {
+        $("balanceConfigModal").classList.add("hidden");
+    }
 });
 
 $("openInvoiceConfig").addEventListener("click", () => {
-    $("sectionInvoiceConfig").classList.remove("hidden");
-    $("sectionBalanceConfig").classList.add("hidden");
-    $("sectionInvoiceConfig").scrollIntoView({ behavior: "smooth" });
+    updateDashboard();
+    $("invoiceConfigModal").classList.remove("hidden");
+});
+
+$("closeInvoiceConfig").addEventListener("click", () => {
+    $("invoiceConfigModal").classList.add("hidden");
+});
+
+$("invoiceConfigModal").addEventListener("click", event => {
+    if (event.target === $("invoiceConfigModal")) {
+        $("invoiceConfigModal").classList.add("hidden");
+    }
 });
 
 // ==========================================
