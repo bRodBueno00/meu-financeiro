@@ -26,6 +26,9 @@ let invoiceSettings = {};
 let recurringMonthOverrides = {};
 let savedDescriptions = [];
 
+let categories = { income: [], credit: [], debit: [] };
+let nextCategoryColorIndex = 0;
+
 let pendingTransactionType = null;
 let pendingTransactionDate = null;
 
@@ -33,11 +36,22 @@ let editingRecurringId = null;
 
 let currentRecurringType = "income";
 let currentTransactionsType = "income";
+let currentCategoriesType = "income";
+let editingCategoryId = null;
 
 let calendarSectionOpen = false;
 let backupSectionOpen = false;
+let currentView = "painel";
 
 const $ = id => document.getElementById(id);
+
+const CATEGORY_PALETTE = [
+    "#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c",
+    "#0891b2", "#ca8a04", "#db2777", "#4f46e5", "#059669",
+    "#b45309", "#7c3aed", "#0d9488", "#e11d48", "#65a30d", "#0369a1"
+];
+
+const OUTROS_ID = "outros";
 
 const money = value => Number(value || 0).toLocaleString("pt-BR", {
     style: "currency",
@@ -79,23 +93,225 @@ function suggestedDateInSelectedMonth() {
 }
 
 // ==========================================
+// CATEGORIAS
+// ==========================================
+
+function ensureOthersCategory() {
+    ["income", "credit", "debit"].forEach(type => {
+        if (!Array.isArray(categories[type])) categories[type] = [];
+        if (!categories[type].some(c => c.id === OUTROS_ID)) {
+            categories[type].unshift({ id: OUTROS_ID, name: "Outros", color: "#64748b" });
+        }
+    });
+}
+
+function nextColor() {
+    const color = CATEGORY_PALETTE[nextCategoryColorIndex % CATEGORY_PALETTE.length];
+    nextCategoryColorIndex++;
+    return color;
+}
+
+function getCategoryById(type, id) {
+    if (!categories[type]) return null;
+    return categories[type].find(c => c.id === id) || null;
+}
+
+function getCategoryName(type, id) {
+    if (!id) return "Outros";
+    const cat = getCategoryById(type, id);
+    return cat ? cat.name : "Outros";
+}
+
+function getCategoryColor(type, id) {
+    if (!id) return "#64748b";
+    const cat = getCategoryById(type, id);
+    return cat ? cat.color : "#64748b";
+}
+
+function normalizeCategoryId(type, id) {
+    if (!id) return OUTROS_ID;
+    if (getCategoryById(type, id)) return id;
+    return OUTROS_ID;
+}
+
+function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
+    const select = $(selectId);
+    if (!select) return;
+
+    select.innerHTML = "";
+
+    const list = categories[type] || [];
+
+    list.forEach(cat => {
+        const opt = document.createElement("option");
+        opt.value = cat.id;
+        opt.textContent = cat.name;
+        select.appendChild(opt);
+    });
+
+    select.value = normalizeCategoryId(type, selectedId);
+}
+
+function openCategoriesMenu() {
+    $("categoriesMenuModal").classList.remove("hidden");
+}
+
+function closeCategoriesMenu() {
+    $("categoriesMenuModal").classList.add("hidden");
+}
+
+function openCategoriesList(type) {
+    currentCategoriesType = type;
+
+    const labels = {
+        income: "Categorias de entrada",
+        credit: "Categorias de saída no crédito",
+        debit: "Categorias de saída no débito"
+    };
+
+    $("categoriesListTitle").textContent = labels[type];
+    $("categoriesListTypeLabel").textContent = "Categorias atuais:";
+
+    $("categoryFormContainer").classList.add("hidden");
+    $("categoriesListModal").classList.remove("hidden");
+
+    renderCategoriesList();
+}
+
+function closeCategoriesListModal() {
+    $("categoriesListModal").classList.add("hidden");
+    $("categoryFormContainer").classList.add("hidden");
+}
+
+function renderCategoriesList() {
+    const container = $("categoriesListContainer");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const list = categories[currentCategoriesType] || [];
+
+    list.forEach(cat => {
+        const row = document.createElement("div");
+        row.className = "planning-item";
+
+        const info = document.createElement("div");
+        info.className = "item-info";
+
+        const nameWrap = document.createElement("div");
+        nameWrap.style.display = "flex";
+        nameWrap.style.alignItems = "center";
+        nameWrap.style.gap = "8px";
+
+        const dot = document.createElement("span");
+        dot.className = "category-dot";
+        dot.style.background = cat.color;
+
+        const name = document.createElement("strong");
+        name.textContent = cat.name;
+
+        nameWrap.append(dot, name);
+        info.appendChild(nameWrap);
+
+        if (cat.id === OUTROS_ID) {
+            const details = document.createElement("small");
+            details.textContent = "Categoria padrão (não editável)";
+            info.appendChild(details);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+
+        if (cat.id !== OUTROS_ID) {
+            const editBtn = document.createElement("button");
+            editBtn.className = "outline-button";
+            editBtn.textContent = "Editar";
+            editBtn.addEventListener("click", () => openCategoryEditModal(cat));
+            actions.appendChild(editBtn);
+
+            const remove = document.createElement("button");
+            remove.className = "delete-button";
+            remove.textContent = "✕";
+            remove.title = "Excluir categoria";
+            remove.addEventListener("click", () => deleteCategory(cat));
+            actions.appendChild(remove);
+        }
+
+        row.append(info, actions);
+        container.appendChild(row);
+    });
+}
+
+function openCategoryForm() {
+    $("categoryFormContainer").classList.remove("hidden");
+    $("categoryForm").reset();
+    $("categoryName").focus();
+}
+
+function closeCategoryForm() {
+    $("categoryFormContainer").classList.add("hidden");
+    $("categoryForm").reset();
+}
+
+function openCategoryEditModal(cat) {
+    editingCategoryId = cat.id;
+    $("categoryEditName").value = cat.name;
+    $("categoryEditModal").classList.remove("hidden");
+}
+
+function closeCategoryEditModal() {
+    $("categoryEditModal").classList.add("hidden");
+    editingCategoryId = null;
+}
+
+function deleteCategory(cat) {
+    const type = currentCategoriesType;
+
+    const inUse = transactions.some(t => t.type === type && t.categoryId === cat.id)
+        || recurring.some(r => r.type === type && r.categoryId === cat.id);
+
+    if (inUse) {
+        if (!confirm(`A categoria "${cat.name}" está em uso. Os lançamentos serão movidos para "Outros". Continuar?`)) {
+            return;
+        }
+
+        transactions.forEach(t => {
+            if (t.type === type && t.categoryId === cat.id) t.categoryId = OUTROS_ID;
+        });
+        recurring.forEach(r => {
+            if (r.type === type && r.categoryId === cat.id) r.categoryId = OUTROS_ID;
+        });
+    } else {
+        if (!confirm(`Excluir a categoria "${cat.name}"?`)) return;
+    }
+
+    categories[type] = categories[type].filter(c => c.id !== cat.id);
+
+    saveData();
+    updateDashboard();
+    renderCategoriesList();
+}
+
+// ==========================================
 // PERSISTÊNCIA LOCAL + DRIVE
 // ==========================================
 
 function getDataSnapshot() {
     return {
-        version: 17,
+        version: 18,
         transactions,
         initialBalances,
         invoiceSettings,
         recurringMonthOverrides,
-        savedDescriptions
+        savedDescriptions,
+        categories,
+        nextCategoryColorIndex
     };
 }
 
 function getRecurringSnapshot() {
     return {
-        version: 5,
+        version: 6,
         recurring
     };
 }
@@ -140,7 +356,8 @@ function rebuildSavedDescriptions() {
 function applyDataSnapshot(data) {
     transactions = (data.transactions || []).map(item => ({
         ...item,
-        type: item.type === "expense" ? "debit" : item.type
+        type: item.type === "expense" ? "debit" : item.type,
+        categoryId: item.categoryId || OUTROS_ID
     }));
 
     initialBalances = data.initialBalances || {};
@@ -153,16 +370,34 @@ function applyDataSnapshot(data) {
         savedDescriptions = [];
     }
 
+    if (data.categories && typeof data.categories === "object") {
+        categories = {
+            income: Array.isArray(data.categories.income) ? data.categories.income.map(c => ({ ...c })) : [],
+            credit: Array.isArray(data.categories.credit) ? data.categories.credit.map(c => ({ ...c })) : [],
+            debit: Array.isArray(data.categories.debit) ? data.categories.debit.map(c => ({ ...c })) : []
+        };
+    } else {
+        categories = { income: [], credit: [], debit: [] };
+    }
+
+    nextCategoryColorIndex = Number.isInteger(data.nextCategoryColorIndex)
+        ? data.nextCategoryColorIndex
+        : 0;
+
+    ensureOthersCategory();
+
     if (Array.isArray(data.recurring)) {
         recurring = data.recurring.map(item => ({
             ...item,
-            type: item.type === "expense" ? "debit" : item.type
+            type: item.type === "expense" ? "debit" : item.type,
+            categoryId: item.categoryId || OUTROS_ID
         }));
     } else if (Array.isArray(data.plans)) {
         recurring = data.plans.map(plan => ({
             id: plan.id || makeId(),
             description: plan.description,
             type: plan.type === "expense" ? "debit" : plan.type,
+            categoryId: OUTROS_ID,
             frequency: plan.repeat === "yearly" ? "yearly" : "monthly",
             dayOfMonth: parseDate(plan.date).getDate(),
             versions: [
@@ -182,7 +417,8 @@ function applyRecurringSnapshot(data) {
     if (data && Array.isArray(data.recurring)) {
         recurring = data.recurring.map(item => ({
             ...item,
-            type: item.type === "expense" ? "debit" : item.type
+            type: item.type === "expense" ? "debit" : item.type,
+            categoryId: item.categoryId || OUTROS_ID
         }));
 
         rebuildSavedDescriptions();
@@ -206,15 +442,20 @@ function loadData() {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
 
-        if (!saved) return;
+        if (!saved) {
+            ensureOthersCategory();
+            return;
+        }
 
         const data = JSON.parse(saved);
 
         if (Array.isArray(data)) {
             transactions = data.map(item => ({
                 ...item,
-                type: item.type === "expense" ? "debit" : item.type
+                type: item.type === "expense" ? "debit" : item.type,
+                categoryId: item.categoryId || OUTROS_ID
             }));
+            ensureOthersCategory();
             rebuildSavedDescriptions();
             return;
         }
@@ -224,7 +465,8 @@ function loadData() {
         if (Array.isArray(data.recurring)) {
             recurring = data.recurring.map(item => ({
                 ...item,
-                type: item.type === "expense" ? "debit" : item.type
+                type: item.type === "expense" ? "debit" : item.type,
+                categoryId: item.categoryId || OUTROS_ID
             }));
         }
 
@@ -981,6 +1223,24 @@ function updateDashboard() {
 }
 
 // ==========================================
+// NAVEGAÇÃO ENTRE ABAS (Painel / Dashboard)
+// ==========================================
+
+function setActiveTab(view) {
+    currentView = view;
+
+    $("tabPainel").classList.toggle("active", view === "painel");
+    $("tabDashboard").classList.toggle("active", view === "dashboard");
+
+    $("painelView").classList.toggle("hidden", view !== "painel");
+    $("dashboardView").classList.toggle("hidden", view !== "dashboard");
+    $("painelHeaderContent").classList.toggle("hidden", view !== "painel");
+}
+
+$("tabPainel").addEventListener("click", () => setActiveTab("painel"));
+$("tabDashboard").addEventListener("click", () => setActiveTab("dashboard"));
+
+// ==========================================
 // CALENDÁRIO FINANCEIRO
 // ==========================================
 
@@ -1131,11 +1391,12 @@ function openDayTransactionsModal(date, type) {
             name.textContent = item.description || labels[item.type];
 
             const details = document.createElement("small");
+            const catName = getCategoryName(item.type, item.categoryId);
 
             if (item.occurrenceDate) {
-                details.textContent = `${labels[item.type]} • Recorrente`;
+                details.textContent = `${labels[item.type]} • ${catName} • Recorrente`;
             } else {
-                details.textContent = labels[item.type];
+                details.textContent = `${labels[item.type]} • ${catName}`;
             }
 
             info.append(name, details);
@@ -1323,6 +1584,8 @@ function openTransactionForm(type, date) {
     $("transactionType").value = type;
     $("transactionInstallments").value = "1";
 
+    populateCategorySelect("transactionCategory", type, OUTROS_ID);
+
     updateInstallmentVisibility();
     populateDescriptionOptions("transactionDescription", "transactionDescriptionList");
 
@@ -1346,6 +1609,8 @@ function updateInstallmentVisibility() {
         container.classList.add("hidden");
         $("transactionInstallments").value = "1";
     }
+
+    populateCategorySelect("transactionCategory", type, $("transactionCategory").value);
 }
 
 $("transactionType").addEventListener("change", updateInstallmentVisibility);
@@ -1361,6 +1626,7 @@ $("transactionForm").addEventListener("submit", event => {
     const installments = type === "credit"
         ? Number($("transactionInstallments").value)
         : 1;
+    const categoryId = normalizeCategoryId(type, $("transactionCategory").value);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
         alert("Preencha os dados corretamente.");
@@ -1396,6 +1662,7 @@ $("transactionForm").addEventListener("submit", event => {
                 description: `${description} (${i + 1}/${installments})`,
                 amount,
                 type: "credit",
+                categoryId,
                 date: localDate(installmentDate),
                 installmentGroupId: groupId,
                 installmentNumber: i + 1,
@@ -1409,6 +1676,7 @@ $("transactionForm").addEventListener("submit", event => {
             description,
             amount: Math.round(totalAmount * 100) / 100,
             type,
+            categoryId,
             date
         });
     }
@@ -1498,6 +1766,7 @@ function renderTransactionsList() {
 
             const details = document.createElement("small");
             let detailText = formatDate(item.date);
+            detailText += ` • ${getCategoryName(item.type, item.categoryId)}`;
             if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
                 detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
             }
@@ -1561,6 +1830,8 @@ function openStandaloneTransactionForm() {
     $("standaloneDate").value = suggestedDateInSelectedMonth();
     $("standaloneInstallments").value = "1";
 
+    populateCategorySelect("standaloneCategory", currentTransactionsType, OUTROS_ID);
+
     updateStandaloneInstallmentVisibility();
     populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 }
@@ -1590,6 +1861,7 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
     const installments = type === "credit"
         ? Number($("standaloneInstallments").value)
         : 1;
+    const categoryId = normalizeCategoryId(type, $("standaloneCategory").value);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
         alert("Preencha os dados corretamente.");
@@ -1625,6 +1897,7 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
                 description: `${description} (${i + 1}/${installments})`,
                 amount,
                 type: "credit",
+                categoryId,
                 date: localDate(installmentDate),
                 installmentGroupId: groupId,
                 installmentNumber: i + 1,
@@ -1638,6 +1911,7 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
             description,
             amount: Math.round(totalAmount * 100) / 100,
             type,
+            categoryId,
             date
         });
     }
@@ -1766,7 +2040,7 @@ function buildRecurringRow(item) {
     const end = version.endDate
         ? `até ${formatDate(version.endDate)}`
         : "sem data fim";
-    details.textContent = `Início ${formatDate(version.startDate)} • ${end}` +
+    details.textContent = `${getCategoryName(item.type, item.categoryId)} • Início ${formatDate(version.startDate)} • ${end}` +
         (hasOverride ? " • Ajustado neste mês" : "");
 
     info.append(name, details);
@@ -1834,6 +2108,8 @@ function openRecurringEditModal(item) {
     $("recurringEditCurrentMonthLabel").textContent =
         `Mês de edição: ${monthLabel}`;
 
+    populateCategorySelect("recurringEditCategory", item.type, item.categoryId);
+
     $("recurringEditExplanation").textContent =
         `Valor base atual da recorrência: ${money(currentVersion.amount)}. ` +
         `Se marcar a opção abaixo, o novo valor será aplicado somente em ${monthLabel}. ` +
@@ -1889,6 +2165,7 @@ $("recurringEditForm").addEventListener("submit", event => {
 
     const description = $("recurringEditDescription").value.trim();
     const amountValue = Number($("recurringEditAmount").value);
+    const categoryId = normalizeCategoryId(item.type, $("recurringEditCategory").value);
 
     if (!description) {
         alert("Informe a descrição.");
@@ -1908,6 +2185,7 @@ $("recurringEditForm").addEventListener("submit", event => {
         || item.versions[item.versions.length - 1];
 
     item.description = description;
+    item.categoryId = categoryId;
     registerDescription(description);
 
     if (onlyThisMonth) {
@@ -2005,6 +2283,7 @@ $("openRecurringForm").addEventListener("click", () => {
 
     $("recurringStart").value = suggestedDateInSelectedMonth();
 
+    populateCategorySelect("recurringCategory", currentRecurringType, OUTROS_ID);
     populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 });
 
@@ -2025,6 +2304,7 @@ $("recurringForm").addEventListener("submit", event => {
     const amount = Number($("recurringAmount").value);
     const startDate = $("recurringStart").value;
     const frequency = $("recurringFrequency").value;
+    const categoryId = normalizeCategoryId(currentRecurringType, $("recurringCategory").value);
 
     if (!description || !Number.isFinite(amount) || amount <= 0 || !startDate) {
         alert("Preencha os dados corretamente.");
@@ -2037,6 +2317,7 @@ $("recurringForm").addEventListener("submit", event => {
         id: makeId(),
         description,
         type: currentRecurringType,
+        categoryId,
         frequency,
         dayOfMonth: parseDate(startDate).getDate(),
         versions: [
@@ -2059,6 +2340,89 @@ $("recurringForm").addEventListener("submit", event => {
 
     $("recurringFormContainer").classList.add("hidden");
     renderRecurringList();
+});
+
+// ==========================================
+// CATEGORIAS — EVENTOS
+// ==========================================
+
+$("openCategoriesMenu").addEventListener("click", openCategoriesMenu);
+$("closeCategoriesMenu").addEventListener("click", closeCategoriesMenu);
+
+$("openIncomeCategories").addEventListener("click", () => openCategoriesList("income"));
+$("openCreditCategories").addEventListener("click", () => openCategoriesList("credit"));
+$("openDebitCategories").addEventListener("click", () => openCategoriesList("debit"));
+
+$("openCategoryForm").addEventListener("click", openCategoryForm);
+$("closeCategoryForm").addEventListener("click", closeCategoryForm);
+$("closeCategoriesListModal").addEventListener("click", closeCategoriesListModal);
+
+$("categoriesMenuModal").addEventListener("click", event => {
+    if (event.target === $("categoriesMenuModal")) closeCategoriesMenu();
+});
+
+$("categoriesListModal").addEventListener("click", event => {
+    if (event.target === $("categoriesListModal")) closeCategoriesListModal();
+});
+
+$("categoryForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const name = $("categoryName").value.trim();
+    if (!name) return;
+
+    const type = currentCategoriesType;
+    const exists = categories[type].some(
+        c => c.name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (exists) {
+        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+        return;
+    }
+
+    categories[type].push({
+        id: makeId(),
+        name,
+        color: nextColor()
+    });
+
+    saveData();
+    closeCategoryForm();
+    renderCategoriesList();
+});
+
+$("closeCategoryEditModal").addEventListener("click", closeCategoryEditModal);
+
+$("categoryEditModal").addEventListener("click", event => {
+    if (event.target === $("categoryEditModal")) closeCategoryEditModal();
+});
+
+$("categoryEditForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    if (!editingCategoryId) return;
+
+    const newName = $("categoryEditName").value.trim();
+    if (!newName) return;
+
+    const type = currentCategoriesType;
+    const exists = categories[type].some(
+        c => c.id !== editingCategoryId && c.name.toLowerCase() === newName.toLowerCase()
+    );
+
+    if (exists) {
+        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+        return;
+    }
+
+    const cat = categories[type].find(c => c.id === editingCategoryId);
+    if (cat) cat.name = newName;
+
+    saveData();
+    updateDashboard();
+    closeCategoryEditModal();
+    renderCategoriesList();
 });
 
 // ==========================================
@@ -2204,7 +2568,7 @@ let touchTracking = false;
 function isInteractiveTarget(target) {
     if (!target) return false;
     return !!target.closest(
-        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector"
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs"
     );
 }
 
@@ -2483,7 +2847,7 @@ $("invoiceConfigModal").addEventListener("click", event => {
 $("exportButton").addEventListener("click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 17,
+        version: 18,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
@@ -2534,7 +2898,8 @@ $("importFile").addEventListener("change", async event => {
         if (Array.isArray(data.recurring)) {
             recurring = data.recurring.map(item => ({
                 ...item,
-                type: item.type === "expense" ? "debit" : item.type
+                type: item.type === "expense" ? "debit" : item.type,
+                categoryId: item.categoryId || OUTROS_ID
             }));
         }
 
@@ -2610,6 +2975,8 @@ $("syncNowButton").addEventListener("click", async () => {
 // INICIALIZAÇÃO
 // ==========================================
 
+ensureOthersCategory();
+
 attachDatalist("transactionDescription", "transactionDescriptionList");
 attachDatalist("recurringDescription", "recurringDescriptionList");
 attachDatalist("recurringEditDescription", "recurringEditDescriptionList");
@@ -2625,4 +2992,5 @@ updateDashboard();
 updateCloudButtons();
 setCalendarSectionOpen(false);
 setBackupSectionOpen(false);
+setActiveTab("painel");
 initGoogleAuth();
