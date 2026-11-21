@@ -938,7 +938,8 @@ function updateDashboard() {
 
     $("balance").textContent = money(closing);
     $("totalIncome").textContent = money(totalIncome);
-    $("totalExpenses").textContent = money(totalExpenses);
+    $("totalInvoice").textContent = money(invoice);
+    $("totalExpenses").textContent = money(debitActual + debitPlanned);
 
     $("todayBalance").textContent = money(getTodayBalance());
 
