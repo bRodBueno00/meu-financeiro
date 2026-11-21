@@ -67,6 +67,9 @@
     </section>
 
     <div class="action-buttons">
+        <button id="openTransactionsMenu" class="primary-button" type="button">
+            Lançamentos
+        </button>
         <button id="openRecurringMenu" class="primary-button" type="button">
             Lançamentos recorrentes
         </button>
@@ -167,6 +170,105 @@
             Apagar todos os dados do mês
         </button>
     </section>
+
+    <div id="transactionsMenu" class="modal-overlay hidden"
+         role="dialog" aria-modal="true">
+        <div class="modal-card" style="max-width:560px">
+            <h3>Lançamentos</h3>
+            <p class="helper" id="transactionsMonthLabel"></p>
+
+            <div class="recurring-tabs">
+                <button id="openIncomeTransactions" class="primary-button" type="button">Entrada</button>
+                <button id="openCreditTransactions" class="primary-button" type="button">Crédito</button>
+                <button id="openDebitTransactions" class="primary-button" type="button">Débito</button>
+            </div>
+
+            <div class="modal-actions">
+                <button id="closeTransactionsMenu" class="cancel-button" type="button">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="transactionsListModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true" aria-labelledby="transactionsListTitle">
+        <div class="modal-card" style="max-width:560px">
+            <h3 id="transactionsListTitle">Lançamentos</h3>
+            <p class="helper" id="transactionsListMonthLabel"></p>
+
+            <div id="transactionsListContainer"></div>
+
+            <div id="transactionFormContainer" class="hidden">
+                <form id="standaloneTransactionForm" style="margin-top:16px">
+                    <label for="standaloneDescription">Descrição</label>
+                    <input id="standaloneDescription" type="text" placeholder="Ex: Compra, salário" required>
+                    <datalist id="standaloneDescriptionList"></datalist>
+
+                    <label for="standaloneAmount">Valor (R$)</label>
+                    <input id="standaloneAmount" type="number" min="0.01" step="0.01" required>
+
+                    <label for="standaloneType">Tipo</label>
+                    <select id="standaloneType">
+                        <option value="income">Entrada</option>
+                        <option value="credit">Crédito</option>
+                        <option value="debit">Débito</option>
+                    </select>
+
+                    <label for="standaloneDate">Data</label>
+                    <input id="standaloneDate" type="date" required>
+
+                    <div id="standaloneInstallmentContainer" class="hidden">
+                        <label for="standaloneInstallments">Parcelas</label>
+                        <select id="standaloneInstallments">
+                            <option value="1">1x (à vista)</option>
+                            <option value="2">2x</option>
+                            <option value="3">3x</option>
+                            <option value="4">4x</option>
+                            <option value="5">5x</option>
+                            <option value="6">6x</option>
+                            <option value="7">7x</option>
+                            <option value="8">8x</option>
+                            <option value="9">9x</option>
+                            <option value="10">10x</option>
+                            <option value="11">11x</option>
+                            <option value="12">12x</option>
+                            <option value="13">13x</option>
+                            <option value="14">14x</option>
+                            <option value="15">15x</option>
+                            <option value="16">16x</option>
+                            <option value="17">17x</option>
+                            <option value="18">18x</option>
+                            <option value="19">19x</option>
+                            <option value="20">20x</option>
+                            <option value="21">21x</option>
+                            <option value="22">22x</option>
+                            <option value="23">23x</option>
+                            <option value="24">24x</option>
+                        </select>
+                    </div>
+
+                    <div class="form-buttons">
+                        <button type="submit" class="primary-button">
+                            Salvar lançamento
+                        </button>
+                        <button type="button" class="cancel-button" id="closeStandaloneForm">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="modal-actions">
+                <button id="openTransactionForm" class="primary-button" type="button">
+                    + Novo
+                </button>
+                <button id="closeTransactionsListModal" class="cancel-button" type="button">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
 
     <div id="recurringMenu" class="modal-overlay hidden"
          role="dialog" aria-modal="true">
