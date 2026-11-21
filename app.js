@@ -1526,8 +1526,8 @@ function setRecurringView(view) {
 function openRecurringMenu() {
     $("recurringMenu").classList.remove("hidden");
     $("recurringFormContainer").classList.add("hidden");
-    setRecurringView(recurringView || "income");
     renderRecurringList();
+    setRecurringView(recurringView || "income");
 }
 
 function closeRecurringMenu() {
