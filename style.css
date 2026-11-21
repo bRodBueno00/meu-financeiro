@@ -1245,3 +1245,19 @@ html[data-theme="dark"] .chart-tooltip {
         height: 190px;
     }
 }
+
+.dash-top-item {
+    transition: background .15s, border-color .15s, transform .1s;
+}
+
+.dash-top-item.selected .dash-top-item-name {
+    color: var(--primary);
+}
+
+.dash-top-item:active {
+    transform: scale(.98);
+}
+
+.chart-wrapper {
+    touch-action: pan-y;
+}
