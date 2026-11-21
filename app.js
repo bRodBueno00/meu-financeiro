@@ -3121,6 +3121,317 @@ safeOn("syncNowButton", "click", async () => {
 })();
 
 // ==========================================
+// DASHBOARD
+// ==========================================
+
+let dashPeriod = { months: 12 };
+let dashProjectionMonths = 6;
+let projectionSectionOpen = false;
+
+function getDashRange() {
+    const now = new Date();
+
+    if (dashPeriod.customStart || dashPeriod.customEnd) {
+        const start = dashPeriod.customStart
+            ? parseDate(dashPeriod.customStart + "-01")
+            : new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
+        const end = dashPeriod.customEnd
+            ? new Date(parseDate(dashPeriod.customEnd + "-01").getFullYear(),
+                    parseDate(dashPeriod.customEnd + "-01").getMonth() + 1, 0, 12)
+            : new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
+        return { start, end };
+    }
+
+    if (dashPeriod.yearOnly) {
+        return {
+            start: new Date(now.getFullYear(), 0, 1, 12),
+            end: new Date(now.getFullYear(), 11, 31, 12)
+        };
+    }
+
+    const months = dashPeriod.months || 12;
+    const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1, 12);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
+    return { start, end };
+}
+
+function forEachMonthInRange(start, end, cb) {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+    const limit = new Date(end.getFullYear(), end.getMonth(), 1, 12);
+
+    while (cursor <= limit) {
+        cb(new Date(cursor.getFullYear(), cursor.getMonth(), 1, 12));
+        cursor.setMonth(cursor.getMonth() + 1);
+    }
+}
+
+function computeMonthTotals(date) {
+    const key = monthKey(date);
+
+    const actual = transactions.filter(item => item.date.startsWith(key));
+    const scheduled = getOccurrencesForMonth(date);
+
+    const incomeActual = actual
+        .filter(x => x.type === "income")
+        .reduce((s, x) => s + x.amount, 0);
+
+    const incomePlanned = scheduled
+        .filter(x => x.type === "income")
+        .reduce((s, x) => s + x.amount, 0);
+
+    const debitActual = actual
+        .filter(x => x.type === "debit")
+        .reduce((s, x) => s + x.amount, 0);
+
+    const debitPlanned = scheduled
+        .filter(x => x.type === "debit")
+        .reduce((s, x) => s + x.amount, 0);
+
+    const invoice = getInvoiceAmount(date);
+    const opening = getOpeningBalance(date);
+    const closing = opening + (incomeActual + incomePlanned)
+        - (debitActual + debitPlanned + invoice);
+
+    return {
+        key,
+        date,
+        income: incomeActual + incomePlanned,
+        debit: debitActual + debitPlanned,
+        invoice,
+        opening,
+        closing
+    };
+}
+
+function renderDashboard() {
+    const { start, end } = getDashRange();
+
+    let totalIncome = 0;
+    let totalDebit = 0;
+    let totalInvoice = 0;
+
+    forEachMonthInRange(start, end, m => {
+        const t = computeMonthTotals(m);
+        totalIncome += t.income;
+        totalDebit += t.debit;
+        totalInvoice += t.invoice;
+    });
+
+    const balance = totalIncome - totalDebit - totalInvoice;
+
+    const setText = (id, v) => {
+        const el = $(id);
+        if (el) el.textContent = v;
+    };
+
+    setText("dashKpiIncome", money(totalIncome));
+    setText("dashKpiDebit", money(totalDebit));
+    setText("dashKpiInvoice", money(totalInvoice));
+    setText("dashKpiBalance", money(balance));
+
+    const percent = totalIncome > 0
+        ? Math.min(100, Math.round((totalDebit / totalIncome) * 100))
+        : 0;
+
+    setText("dashComparePercent", `${percent}%`);
+
+    const fill = $("dashCompareFill");
+    if (fill) {
+        fill.style.width = `${percent}%`;
+        fill.classList.toggle("warn", percent >= 70 && percent < 100);
+        fill.classList.toggle("danger", percent >= 100);
+    }
+
+    const hint = $("dashCompareHint");
+    if (hint) {
+        if (totalIncome === 0 && totalDebit === 0) {
+            hint.textContent = "Sem lançamentos no período.";
+        } else if (percent < 70) {
+            hint.textContent = `Você está gastando ${percent}% do que entra. Boa margem.`;
+        } else if (percent < 100) {
+            hint.textContent = `Atenção: ${percent}% da sua entrada está indo para saídas no débito.`;
+        } else {
+            hint.textContent = `Alerta: suas saídas no débito superam as entradas.`;
+        }
+    }
+
+    const periodLabel = $("dashPeriodLabel");
+    if (periodLabel) {
+        const fmt = d => d.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+        periodLabel.textContent = `${fmt(start)} → ${fmt(end)}`;
+    }
+
+    renderProjection();
+}
+
+function renderProjection() {
+    const container = $("projectionList");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const today = new Date();
+    const baseDate = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+
+    let accumulated = calculateMonthClosing(
+        new Date(today.getFullYear(), today.getMonth() - 1, 1, 12)
+    );
+
+    for (let i = 0; i < dashProjectionMonths; i++) {
+        const monthDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1, 12);
+        const t = computeMonthTotals(monthDate);
+
+        accumulated = t.closing;
+
+        const row = document.createElement("div");
+        row.className = "dash-projection-row";
+
+        const label = monthDate.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric"
+        });
+
+        const nameEl = document.createElement("strong");
+        nameEl.textContent = label;
+
+        const valueEl = document.createElement("span");
+        valueEl.className = "dash-projection-value";
+        if (accumulated < 0) valueEl.classList.add("negative");
+        valueEl.textContent = money(accumulated);
+
+        row.append(nameEl, valueEl);
+        container.appendChild(row);
+    }
+}
+
+function updateDashShortcutButtons() {
+    document.querySelectorAll(".dash-shortcut").forEach(btn => {
+        const months = btn.getAttribute("data-months");
+        const range = btn.getAttribute("data-range");
+
+        let active = false;
+
+        if (months && !dashPeriod.customStart && !dashPeriod.customEnd && !dashPeriod.yearOnly) {
+            active = Number(months) === Number(dashPeriod.months);
+        }
+        if (range === "year" && dashPeriod.yearOnly) active = true;
+        if (range === "custom" && (dashPeriod.customStart || dashPeriod.customEnd)) active = true;
+
+        btn.classList.toggle("active", active);
+    });
+}
+
+function applyDashPreset(months) {
+    dashPeriod = { months };
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.add("hidden");
+    updateDashShortcutButtons();
+    renderDashboard();
+}
+
+function applyDashYear() {
+    dashPeriod = { yearOnly: true };
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.add("hidden");
+    updateDashShortcutButtons();
+    renderDashboard();
+}
+
+function applyDashCustom() {
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.remove("hidden");
+
+    const startEl = $("dashStart");
+    const endEl = $("dashEnd");
+
+    const now = new Date();
+    const defaultStart = new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
+    const defaultEnd = now;
+
+    if (startEl && !startEl.value) {
+        startEl.value = `${defaultStart.getFullYear()}-${String(defaultStart.getMonth() + 1).padStart(2, "0")}`;
+    }
+    if (endEl && !endEl.value) {
+        endEl.value = `${defaultEnd.getFullYear()}-${String(defaultEnd.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    dashPeriod = {
+        customStart: startEl ? startEl.value : null,
+        customEnd: endEl ? endEl.value : null
+    };
+
+    updateDashShortcutButtons();
+    renderDashboard();
+}
+
+document.querySelectorAll(".dash-shortcut").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const months = btn.getAttribute("data-months");
+        const range = btn.getAttribute("data-range");
+
+        if (months) applyDashPreset(Number(months));
+        else if (range === "year") applyDashYear();
+        else if (range === "custom") applyDashCustom();
+    });
+});
+
+safeOn("dashStart", "change", () => {
+    const startEl = $("dashStart");
+    const endEl = $("dashEnd");
+    dashPeriod.customStart = startEl ? startEl.value : null;
+    dashPeriod.customEnd = endEl ? endEl.value : null;
+    dashPeriod.months = null;
+    dashPeriod.yearOnly = false;
+    updateDashShortcutButtons();
+    renderDashboard();
+});
+
+safeOn("dashEnd", "change", () => {
+    const startEl = $("dashStart");
+    const endEl = $("dashEnd");
+    dashPeriod.customStart = startEl ? startEl.value : null;
+    dashPeriod.customEnd = endEl ? endEl.value : null;
+    dashPeriod.months = null;
+    dashPeriod.yearOnly = false;
+    updateDashShortcutButtons();
+    renderDashboard();
+});
+
+safeOn("toggleProjectionButton", "click", () => {
+    projectionSectionOpen = !projectionSectionOpen;
+    const section = $("projectionSection");
+    if (section) section.classList.toggle("hidden", !projectionSectionOpen);
+    const icon = $("toggleProjectionIcon");
+    if (icon) icon.textContent = projectionSectionOpen ? "▾" : "▸";
+    if (projectionSectionOpen) renderProjection();
+});
+
+safeOn("projectionMonths", "input", () => {
+    const el = $("projectionMonths");
+    if (!el) return;
+    const v = Number(el.value);
+    if (Number.isFinite(v) && v >= 1 && v <= 24) {
+        dashProjectionMonths = v;
+        renderProjection();
+    }
+});
+
+safeOn("dashOpenTransactionsMenu", "click", openTransactionsMenu);
+safeOn("dashOpenRecurringMenu", "click", openRecurringMenu);
+
+const _originalSetActiveTab = setActiveTab;
+setActiveTab = function (view) {
+    _originalSetActiveTab(view);
+    if (view === "dashboard") {
+        updateDashShortcutButtons();
+        renderDashboard();
+    }
+};
+
+// Aplica o preset padrão de 12 meses
+applyDashPreset(12);
+
+// ==========================================
 // INICIALIZAÇÃO
 // ==========================================
 
