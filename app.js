@@ -45,6 +45,10 @@ let calendarSectionOpen = false;
 let backupSectionOpen = false;
 let currentView = "painel";
 
+let dashPeriod = { months: 12 };
+let dashProjectionMonths = 6;
+let projectionSectionOpen = false;
+
 const $ = id => document.getElementById(id);
 
 const CATEGORY_PALETTE = [
@@ -96,10 +100,7 @@ function suggestedDateInSelectedMonth() {
 
 function safeOn(id, event, handler) {
     const el = $(id);
-    if (!el) {
-        console.warn("Elemento não encontrado:", id);
-        return;
-    }
+    if (!el) return;
     el.addEventListener(event, handler);
 }
 
@@ -133,12 +134,6 @@ function getCategoryName(type, id) {
     return cat ? cat.name : "Outros";
 }
 
-function getCategoryColor(type, id) {
-    if (!id) return "#64748b";
-    const cat = getCategoryById(type, id);
-    return cat ? cat.color : "#64748b";
-}
-
 function normalizeCategoryId(type, id) {
     if (!id) return OUTROS_ID;
     if (getCategoryById(type, id)) return id;
@@ -168,12 +163,8 @@ function resolveCategoryType(buttonType, targetSelectId) {
         const typeEl = $("transactionType");
         return typeEl ? typeEl.value : currentCategoriesType;
     }
-    if (targetSelectId === "standaloneCategory") {
-        return currentTransactionsType;
-    }
-    if (targetSelectId === "recurringCategory") {
-        return currentRecurringType;
-    }
+    if (targetSelectId === "standaloneCategory") return currentTransactionsType;
+    if (targetSelectId === "recurringCategory") return currentRecurringType;
     if (targetSelectId === "recurringEditCategory") {
         if (editingRecurringId) {
             const item = recurring.find(x => x.id === editingRecurringId);
@@ -190,12 +181,7 @@ function openNewCategoryModal(targetSelectId, buttonType) {
         type: resolveCategoryType(buttonType, targetSelectId)
     };
 
-    const labels = {
-        income: "Entrada",
-        credit: "Crédito",
-        debit: "Débito"
-    };
-
+    const labels = { income: "Entrada", credit: "Crédito", debit: "Débito" };
     const labelEl = $("newCategoryTypeLabel");
     if (labelEl) labelEl.textContent = `Tipo: ${labels[pendingCategoryTarget.type] || ""}`;
 
@@ -223,10 +209,10 @@ safeOn("newCategoryModal", "click", event => {
 
 safeOn("newCategoryForm", "submit", event => {
     event.preventDefault();
-
     if (!pendingCategoryTarget) return;
 
-    const name = ($("newCategoryName").value || "").trim();
+    const nameInput = $("newCategoryName");
+    const name = nameInput ? nameInput.value.trim() : "";
     if (!name) return;
 
     const type = pendingCategoryTarget.type;
@@ -239,24 +225,13 @@ safeOn("newCategoryForm", "submit", event => {
         return;
     }
 
-    const newCat = {
-        id: makeId(),
-        name,
-        color: nextColor()
-    };
-
+    const newCat = { id: makeId(), name, color: nextColor() };
     categories[type].push(newCat);
 
     saveData();
-
     populateCategorySelect(pendingCategoryTarget.selectId, type, newCat.id);
-
     closeNewCategoryModal();
 });
-
-// ==========================================
-// GERENCIAR CATEGORIAS (botão ⚙️)
-// ==========================================
 
 function openCategoriesListForType(type) {
     currentCategoriesType = type;
@@ -364,9 +339,7 @@ function deleteCategory(cat) {
         || recurring.some(r => r.type === type && r.categoryId === cat.id);
 
     if (inUse) {
-        if (!confirm(`A categoria "${cat.name}" está em uso. Os lançamentos serão movidos para "Outros". Continuar?`)) {
-            return;
-        }
+        if (!confirm(`A categoria "${cat.name}" está em uso. Os lançamentos serão movidos para "Outros". Continuar?`)) return;
 
         transactions.forEach(t => {
             if (t.type === type && t.categoryId === cat.id) t.categoryId = OUTROS_ID;
@@ -399,7 +372,6 @@ safeOn("categoryEditModal", "click", event => {
 
 safeOn("categoryEditForm", "submit", event => {
     event.preventDefault();
-
     if (!editingCategoryId) return;
 
     const input = $("categoryEditName");
@@ -443,12 +415,11 @@ document.addEventListener("click", event => {
             targetId
         );
         openCategoriesListForType(type);
-        return;
     }
 });
 
 // ==========================================
-// PERSISTÊNCIA LOCAL + DRIVE
+// PERSISTÊNCIA
 // ==========================================
 
 function getDataSnapshot() {
@@ -465,38 +436,27 @@ function getDataSnapshot() {
 }
 
 function getRecurringSnapshot() {
-    return {
-        version: 6,
-        recurring
-    };
+    return { version: 6, recurring };
 }
 
 function registerDescription(name) {
     const trimmed = (name || "").trim();
     if (!trimmed) return;
 
-    const exists = savedDescriptions.some(
-        d => d.toLowerCase() === trimmed.toLowerCase()
-    );
-
+    const exists = savedDescriptions.some(d => d.toLowerCase() === trimmed.toLowerCase());
     if (!exists) {
         savedDescriptions.push(trimmed);
-        savedDescriptions.sort((a, b) =>
-            a.localeCompare(b, "pt-BR", { sensitivity: "base" })
-        );
+        savedDescriptions.sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
     }
 }
 
 function rebuildSavedDescriptions() {
     const set = new Map();
-
     const add = name => {
         const trimmed = (name || "").trim();
         if (!trimmed) return;
         const key = trimmed.toLowerCase();
-        if (!set.has(key)) {
-            set.set(key, trimmed);
-        }
+        if (!set.has(key)) set.set(key, trimmed);
     };
 
     transactions.forEach(t => add(t.description));
@@ -519,11 +479,7 @@ function applyDataSnapshot(data) {
     invoiceSettings = data.invoiceSettings || {};
     recurringMonthOverrides = data.recurringMonthOverrides || {};
 
-    if (Array.isArray(data.savedDescriptions)) {
-        savedDescriptions = data.savedDescriptions.slice();
-    } else {
-        savedDescriptions = [];
-    }
+    savedDescriptions = Array.isArray(data.savedDescriptions) ? data.savedDescriptions.slice() : [];
 
     if (data.categories && typeof data.categories === "object") {
         categories = {
@@ -535,10 +491,7 @@ function applyDataSnapshot(data) {
         categories = { income: [], credit: [], debit: [] };
     }
 
-    nextCategoryColorIndex = Number.isInteger(data.nextCategoryColorIndex)
-        ? data.nextCategoryColorIndex
-        : 0;
-
+    nextCategoryColorIndex = Number.isInteger(data.nextCategoryColorIndex) ? data.nextCategoryColorIndex : 0;
     ensureOthersCategory();
 
     if (Array.isArray(data.recurring)) {
@@ -546,22 +499,6 @@ function applyDataSnapshot(data) {
             ...item,
             type: item.type === "expense" ? "debit" : item.type,
             categoryId: item.categoryId || OUTROS_ID
-        }));
-    } else if (Array.isArray(data.plans)) {
-        recurring = data.plans.map(plan => ({
-            id: plan.id || makeId(),
-            description: plan.description,
-            type: plan.type === "expense" ? "debit" : plan.type,
-            categoryId: OUTROS_ID,
-            frequency: plan.repeat === "yearly" ? "yearly" : "monthly",
-            dayOfMonth: parseDate(plan.date).getDate(),
-            versions: [
-                {
-                    amount: plan.amount,
-                    startDate: plan.date,
-                    endDate: plan.repeat === "once" ? plan.date : null
-                }
-            ]
         }));
     }
 
@@ -575,7 +512,6 @@ function applyRecurringSnapshot(data) {
             type: item.type === "expense" ? "debit" : item.type,
             categoryId: item.categoryId || OUTROS_ID
         }));
-
         rebuildSavedDescriptions();
     }
 }
@@ -589,18 +525,13 @@ function saveData() {
     } catch (error) {
         alert("Não foi possível salvar os dados localmente. Exporte um backup.");
     }
-
     scheduleCloudSave();
 }
 
 function loadData() {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
-
-        if (!saved) {
-            ensureOthersCategory();
-            return;
-        }
+        if (!saved) { ensureOthersCategory(); return; }
 
         const data = JSON.parse(saved);
 
@@ -626,7 +557,6 @@ function loadData() {
         }
 
         rebuildSavedDescriptions();
-
     } catch (error) {
         console.error("Erro ao carregar dados:", error);
     }
@@ -661,25 +591,17 @@ function initGoogleAuth() {
         client_id: CLIENT_ID,
         scope: SCOPES,
         callback: async (response) => {
-            if (response.error) {
-                setCloudStatus("Drive: falha no login");
-                return;
-            }
+            if (response.error) { setCloudStatus("Drive: falha no login"); return; }
 
             accessToken = response.access_token;
-
             const expiresIn = Number(response.expires_in || 3600);
-            localStorage.setItem(
-                "meuFinanceiroToken",
-                JSON.stringify({
-                    token: accessToken,
-                    expiresAt: Date.now() + expiresIn * 1000
-                })
-            );
+            localStorage.setItem("meuFinanceiroToken", JSON.stringify({
+                token: accessToken,
+                expiresAt: Date.now() + expiresIn * 1000
+            }));
 
             setCloudStatus("Drive: conectado");
             updateCloudButtons();
-
             await loadFromDrive();
         }
     });
@@ -699,7 +621,6 @@ function logoutGoogle() {
     if (accessToken && window.google && google.accounts.oauth2) {
         google.accounts.oauth2.revoke(accessToken, () => {});
     }
-
     accessToken = null;
     currentFileId = null;
     currentRecurringFileId = null;
@@ -711,19 +632,13 @@ function logoutGoogle() {
 async function driveFetch(url, options = {}) {
     const opts = {
         ...options,
-        headers: {
-            ...(options.headers || {}),
-            Authorization: `Bearer ${accessToken}`
-        }
+        headers: { ...(options.headers || {}), Authorization: `Bearer ${accessToken}` }
     };
-
     const response = await fetch(url, opts);
-
     if (response.status === 401) {
         logoutGoogle();
         throw new Error("Sessão expirada. Faça login novamente.");
     }
-
     return response;
 }
 
@@ -731,26 +646,15 @@ async function findOrCreateFolder() {
     const query = encodeURIComponent(
         `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
     );
-
-    const res = await driveFetch(
-        `${DRIVE_API}/files?q=${query}&fields=files(id,name)`
-    );
-
+    const res = await driveFetch(`${DRIVE_API}/files?q=${query}&fields=files(id,name)`);
     const data = await res.json();
-
-    if (data.files && data.files.length > 0) {
-        return data.files[0].id;
-    }
+    if (data.files && data.files.length > 0) return data.files[0].id;
 
     const createRes = await driveFetch(`${DRIVE_API}/files`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            name: FOLDER_NAME,
-            mimeType: "application/vnd.google-apps.folder"
-        })
+        body: JSON.stringify({ name: FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
     });
-
     const created = await createRes.json();
     return created.id;
 }
@@ -759,28 +663,17 @@ async function findFileInFolder(folderId, fileName) {
     const query = encodeURIComponent(
         `name='${fileName}' and '${folderId}' in parents and trashed=false`
     );
-
-    const res = await driveFetch(
-        `${DRIVE_API}/files?q=${query}&fields=files(id,name,modifiedTime)`
-    );
-
+    const res = await driveFetch(`${DRIVE_API}/files?q=${query}&fields=files(id,name,modifiedTime)`);
     const data = await res.json();
-
-    if (data.files && data.files.length > 0) {
-        return data.files[0];
-    }
-
+    if (data.files && data.files.length > 0) return data.files[0];
     return null;
 }
 
 async function loadFromDrive() {
     if (!accessToken) return;
-
     try {
         setCloudStatus("Drive: carregando...");
-
         const folderId = await findOrCreateFolder();
-
         const file = await findFileInFolder(folderId, FILE_NAME);
         const recurringFile = await findFileInFolder(folderId, RECURRING_FILE_NAME);
 
@@ -794,45 +687,30 @@ async function loadFromDrive() {
         if (file) {
             currentFileId = file.id;
             const res = await driveFetch(`${DRIVE_API}/files/${file.id}?alt=media`);
-            const data = await res.json();
-            applyDataSnapshot(data);
+            applyDataSnapshot(await res.json());
         }
 
         if (recurringFile) {
             currentRecurringFileId = recurringFile.id;
             const res = await driveFetch(`${DRIVE_API}/files/${recurringFile.id}?alt=media`);
-            const data = await res.json();
-            applyRecurringSnapshot(data);
+            applyRecurringSnapshot(await res.json());
         }
 
         rebuildSavedDescriptions();
-
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            ...getDataSnapshot(),
-            recurring
-        }));
-
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...getDataSnapshot(), recurring }));
         setCloudStatus("Drive: dados carregados");
     } catch (error) {
         setCloudStatus("Drive: erro ao carregar");
         console.error(error);
     } finally {
-        try {
-            updateDashboard();
-        } catch (e) {
-            console.error("Erro ao atualizar painel após carregar Drive:", e);
-        }
+        refreshCurrentView();
     }
 }
 
 function scheduleCloudSave() {
     if (!accessToken) return;
-
     if (saveTimer) clearTimeout(saveTimer);
-
-    saveTimer = setTimeout(() => {
-        saveToDrive();
-    }, 1200);
+    saveTimer = setTimeout(() => saveToDrive(), 1200);
 }
 
 async function uploadOrUpdateFile(folderId, fileName, currentId, body) {
@@ -842,12 +720,7 @@ async function uploadOrUpdateFile(folderId, fileName, currentId, body) {
     }
 
     if (!currentId) {
-        const metadata = {
-            name: fileName,
-            mimeType: "application/json",
-            parents: [folderId]
-        };
-
+        const metadata = { name: fileName, mimeType: "application/json", parents: [folderId] };
         const form = new FormData();
         form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
         form.append("file", new Blob([body], { type: "application/json" }));
@@ -856,42 +729,28 @@ async function uploadOrUpdateFile(folderId, fileName, currentId, body) {
             `${UPLOAD_API}/files?uploadType=multipart&fields=id`,
             { method: "POST", body: form }
         );
-
         const created = await res.json();
         return created.id;
     }
 
     const res = await driveFetch(
         `${UPLOAD_API}/files/${currentId}?uploadType=media`,
-        {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body
-        }
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body }
     );
-
     if (!res.ok) throw new Error("Falha ao atualizar arquivo");
     return currentId;
 }
 
 async function saveToDrive() {
     if (!accessToken) return;
-
     try {
         setCloudStatus("Drive: salvando...");
-
         const folderId = await findOrCreateFolder();
-
         const financeiroBody = JSON.stringify(getDataSnapshot(), null, 2);
         const recurringBody = JSON.stringify(getRecurringSnapshot(), null, 2);
 
-        currentFileId = await uploadOrUpdateFile(
-            folderId, FILE_NAME, currentFileId, financeiroBody
-        );
-
-        currentRecurringFileId = await uploadOrUpdateFile(
-            folderId, RECURRING_FILE_NAME, currentRecurringFileId, recurringBody
-        );
+        currentFileId = await uploadOrUpdateFile(folderId, FILE_NAME, currentFileId, financeiroBody);
+        currentRecurringFileId = await uploadOrUpdateFile(folderId, RECURRING_FILE_NAME, currentRecurringFileId, recurringBody);
 
         setCloudStatus("Drive: salvo ✓");
     } catch (error) {
@@ -901,23 +760,23 @@ async function saveToDrive() {
 }
 
 // ==========================================
-// CONFIGURAÇÃO DA FATURA
+// FATURA
 // ==========================================
 
 function getInvoiceConfig(date = selectedDate) {
     const key = monthKey(date);
-
-    return invoiceSettings[key] || {
-        start: 14,
-        end: 15,
-        due: 20
-    };
+    return invoiceSettings[key] || { start: 14, end: 15, due: 20 };
 }
 
 function saveInvoiceConfig() {
-    const start = Number($("invoiceStart").value);
-    const end = Number($("invoiceEnd").value);
-    const due = Number($("invoiceDueDay").value);
+    const startEl = $("invoiceStart");
+    const endEl = $("invoiceEnd");
+    const dueEl = $("invoiceDueDay");
+    if (!startEl || !endEl || !dueEl) return;
+
+    const start = Number(startEl.value);
+    const end = Number(endEl.value);
+    const due = Number(dueEl.value);
 
     if (
         !Number.isInteger(start) || start < 1 || start > 31 ||
@@ -929,41 +788,33 @@ function saveInvoiceConfig() {
     }
 
     invoiceSettings[monthKey(selectedDate)] = { start, end, due };
-
     saveData();
-    updateDashboard();
-
+    refreshCurrentView();
     alert("Configuração da fatura salva para este mês.");
 }
 
 function renderInvoiceSettings() {
     const config = getInvoiceConfig();
-
-    $("invoiceStart").value = config.start;
-    $("invoiceEnd").value = config.end;
-    $("invoiceDueDay").value = config.due;
+    const startEl = $("invoiceStart");
+    const endEl = $("invoiceEnd");
+    const dueEl = $("invoiceDueDay");
+    if (startEl) startEl.value = config.start;
+    if (endEl) endEl.value = config.end;
+    if (dueEl) dueEl.value = config.due;
 }
 
 // ==========================================
-// SALDO INICIAL AUTOMÁTICO
+// SALDO
 // ==========================================
 
 function getOpeningBalance(date, depth = 0) {
     const key = monthKey(date);
-
     if (Object.prototype.hasOwnProperty.call(initialBalances, key)) {
         return Number(initialBalances[key]);
     }
-
     if (depth >= 120) return 0;
 
-    const previousMonth = new Date(
-        date.getFullYear(),
-        date.getMonth() - 1,
-        1,
-        12
-    );
-
+    const previousMonth = new Date(date.getFullYear(), date.getMonth() - 1, 1, 12);
     return calculateMonthClosing(previousMonth, depth + 1);
 }
 
@@ -973,30 +824,20 @@ function calculateMonthClosing(date, depth = 0) {
     const year = date.getFullYear();
     const month = date.getMonth();
 
-    const actual = transactions.filter(item =>
-        item.date.startsWith(monthKey(date))
-    );
-
+    const actual = transactions.filter(item => item.date.startsWith(monthKey(date)));
     const scheduled = getOccurrencesForMonth(date);
-
     const opening = getOpeningBalance(date, depth);
 
     let balance = opening;
-
     const days = new Date(year, month + 1, 0).getDate();
-
     const invoice = getInvoiceAmount(date);
     const invoiceDue = getInvoiceDueDate(date);
 
     for (let day = 1; day <= days; day++) {
         const currentDay = localDate(new Date(year, month, day, 12));
-
         const values = getDayValues(currentDay, actual, scheduled);
-
         let debit = values.debit;
-
         if (currentDay === invoiceDue) debit += invoice;
-
         balance += values.income - debit;
     }
 
@@ -1004,7 +845,10 @@ function calculateMonthClosing(date, depth = 0) {
 }
 
 function saveInitialBalance() {
-    const raw = $("initialBalance").value;
+    const input = $("initialBalance");
+    if (!input) return;
+
+    const raw = input.value;
     const value = Number(raw);
 
     if (raw.trim() === "" || !Number.isFinite(value)) {
@@ -1013,36 +857,27 @@ function saveInitialBalance() {
     }
 
     initialBalances[monthKey(selectedDate)] = Math.round(value * 100) / 100;
-
     saveData();
-    updateDashboard();
-
+    refreshCurrentView();
     alert("Saldo inicial salvo com sucesso.");
 }
 
 // ==========================================
-// LANÇAMENTOS RECORRENTES
+// RECORRENTES
 // ==========================================
 
 function getVersionForDate(item, date) {
     if (!item.versions || !item.versions.length) return null;
 
     const target = localDate(new Date(date.getFullYear(), date.getMonth(), 1, 12));
-
-    const sorted = [...item.versions].sort((a, b) =>
-        a.startDate.localeCompare(b.startDate)
-    );
+    const sorted = [...item.versions].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
     let chosen = null;
-
     for (const v of sorted) {
         if (v.startDate <= target) {
-            if (!v.endDate || v.endDate >= target) {
-                chosen = v;
-            }
+            if (!v.endDate || v.endDate >= target) chosen = v;
         }
     }
-
     return chosen;
 }
 
@@ -1056,10 +891,7 @@ function recurringIsActiveInMonth(item, date) {
 
     if (!item.versions || !item.versions.length) return null;
 
-    const firstVersionStart = [...item.versions]
-        .map(v => v.startDate)
-        .sort()[0];
-
+    const firstVersionStart = [...item.versions].map(v => v.startDate).sort()[0];
     const start = parseDate(firstVersionStart);
 
     const version = getVersionForDate(item, new Date(year, month, 1, 12));
@@ -1076,9 +908,7 @@ function recurringIsActiveInMonth(item, date) {
         occurrence = localDate(new Date(year, month, day, 12));
     } else {
         const fm = new Date(year, month, 1, 12);
-        if (fm < new Date(start.getFullYear(), start.getMonth(), 1, 12)) {
-            return null;
-        }
+        if (fm < new Date(start.getFullYear(), start.getMonth(), 1, 12)) return null;
 
         const last = new Date(year, month + 1, 0, 12);
         const day = Math.min(item.dayOfMonth || start.getDate(), last.getDate());
@@ -1088,12 +918,8 @@ function recurringIsActiveInMonth(item, date) {
     if (occurrence < version.startDate) return null;
     if (version.endDate && occurrence > version.endDate) return null;
 
-    const overrideKey = getOverrideKey(item.id, date);
-    const override = recurringMonthOverrides[overrideKey];
-
-    const effectiveAmount = override !== undefined
-        ? override
-        : version.amount;
+    const override = recurringMonthOverrides[getOverrideKey(item.id, date)];
+    const effectiveAmount = override !== undefined ? override : version.amount;
 
     return {
         occurrence,
@@ -1105,7 +931,6 @@ function recurringIsActiveInMonth(item, date) {
 
 function getOccurrencesForMonth(date) {
     const occurrences = [];
-
     if (!Array.isArray(recurring)) return occurrences;
 
     recurring.forEach(item => {
@@ -1150,17 +975,8 @@ function getInvoiceMonthFromDate(dateStr) {
     for (const candidate of candidates) {
         const config = getInvoiceConfig(candidate);
 
-        const previousLastDay = new Date(
-            candidate.getFullYear(),
-            candidate.getMonth(),
-            0
-        ).getDate();
-
-        const currentLastDay = new Date(
-            candidate.getFullYear(),
-            candidate.getMonth() + 1,
-            0
-        ).getDate();
+        const previousLastDay = new Date(candidate.getFullYear(), candidate.getMonth(), 0).getDate();
+        const currentLastDay = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
 
         const periodStart = new Date(
             candidate.getFullYear(),
@@ -1168,7 +984,6 @@ function getInvoiceMonthFromDate(dateStr) {
             Math.min(config.start, previousLastDay),
             12
         );
-
         const periodEnd = new Date(
             candidate.getFullYear(),
             candidate.getMonth(),
@@ -1197,11 +1012,9 @@ function getInvoiceAmount(date = selectedDate) {
             .reduce((sum, item) => sum + item.amount, 0);
 
         const prevDate = new Date(date.getFullYear(), date.getMonth() - 1, 1, 12);
-
-        const monthsToScan = [prevDate, date];
-
         let recurringCredit = 0;
-        monthsToScan.forEach(scanDate => {
+
+        [prevDate, date].forEach(scanDate => {
             getOccurrencesForMonth(scanDate).forEach(item => {
                 if (item.type !== "credit") return;
                 if (getInvoiceMonthFromDate(item.occurrenceDate) === key) {
@@ -1219,59 +1032,30 @@ function getInvoiceAmount(date = selectedDate) {
 
 function getInvoiceDueDate(date = selectedDate) {
     const config = getInvoiceConfig(date);
-
-    const lastDay = new Date(
-        date.getFullYear(),
-        date.getMonth() + 1,
-        0
-    ).getDate();
-
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
     const due = Math.min(config.due, lastDay);
-
     return localDate(new Date(date.getFullYear(), date.getMonth(), due, 12));
 }
-
-// ==========================================
-// VALORES DIÁRIOS
-// ==========================================
 
 function getDayValues(date, actual, scheduled) {
     const dayActual = actual.filter(x => x.date === date);
     const dayScheduled = scheduled.filter(x => x.occurrenceDate === date);
-
     const all = [...dayActual, ...dayScheduled];
 
-    const income = all
-        .filter(x => x.type === "income")
-        .reduce((sum, x) => sum + x.amount, 0);
-
-    const credit = all
-        .filter(x => x.type === "credit")
-        .reduce((sum, x) => sum + x.amount, 0);
-
-    const debit = all
-        .filter(x => x.type === "debit")
-        .reduce((sum, x) => sum + x.amount, 0);
+    const income = all.filter(x => x.type === "income").reduce((s, x) => s + x.amount, 0);
+    const credit = all.filter(x => x.type === "credit").reduce((s, x) => s + x.amount, 0);
+    const debit = all.filter(x => x.type === "debit").reduce((s, x) => s + x.amount, 0);
 
     return { income, credit, debit, all };
 }
 
-// ==========================================
-// SALDO DE HOJE
-// ==========================================
-
 function getTodayBalance() {
     const today = new Date();
-
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
 
-    const actual = transactions.filter(item =>
-        item.date.startsWith(monthKey(selectedDate))
-    );
-
+    const actual = transactions.filter(item => item.date.startsWith(monthKey(selectedDate)));
     const scheduled = getMonthlyOccurrences();
-
     const invoice = getInvoiceAmount();
     const invoiceDue = getInvoiceDueDate();
 
@@ -1281,22 +1065,15 @@ function getTodayBalance() {
     const todayKey = monthKey(today);
 
     let limitDay;
-
-    if (selectedKey < todayKey) {
-        limitDay = new Date(year, month + 1, 0).getDate();
-    } else if (selectedKey > todayKey) {
-        return 0;
-    } else {
-        limitDay = today.getDate();
-    }
+    if (selectedKey < todayKey) limitDay = new Date(year, month + 1, 0).getDate();
+    else if (selectedKey > todayKey) return 0;
+    else limitDay = today.getDate();
 
     for (let day = 1; day <= limitDay; day++) {
         const currentDay = localDate(new Date(year, month, day, 12));
         const values = getDayValues(currentDay, actual, scheduled);
-
         let debit = values.debit;
         if (currentDay === invoiceDue) debit += invoice;
-
         balance += values.income - debit;
     }
 
@@ -1304,92 +1081,296 @@ function getTodayBalance() {
 }
 
 // ==========================================
-// ATUALIZAÇÃO DO PAINEL
+// PAINEL
 // ==========================================
 
-function updateDashboard() {
-    try {
-        const actual = transactions.filter(item =>
-            item.date.startsWith(monthKey(selectedDate))
-        );
+function updatePainel() {
+    const actual = transactions.filter(item => item.date.startsWith(monthKey(selectedDate)));
+    const scheduled = getMonthlyOccurrences();
 
-        const scheduled = getMonthlyOccurrences();
+    const incomeActual = actual.filter(x => x.type === "income").reduce((s, x) => s + x.amount, 0);
+    const debitActual = actual.filter(x => x.type === "debit").reduce((s, x) => s + x.amount, 0);
+    const incomePlanned = scheduled.filter(x => x.type === "income").reduce((s, x) => s + x.amount, 0);
+    const debitPlanned = scheduled.filter(x => x.type === "debit").reduce((s, x) => s + x.amount, 0);
 
-        const incomeActual = actual
-            .filter(x => x.type === "income")
-            .reduce((sum, x) => sum + x.amount, 0);
+    const invoice = getInvoiceAmount();
+    const opening = getOpeningBalance(selectedDate);
 
-        const debitActual = actual
-            .filter(x => x.type === "debit")
-            .reduce((sum, x) => sum + x.amount, 0);
+    const totalIncome = incomeActual + incomePlanned;
+    const totalExpenses = debitActual + debitPlanned + invoice;
+    const closing = opening + totalIncome - totalExpenses;
 
-        const incomePlanned = scheduled
-            .filter(x => x.type === "income")
-            .reduce((sum, x) => sum + x.amount, 0);
+    const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
 
-        const debitPlanned = scheduled
-            .filter(x => x.type === "debit")
-            .reduce((sum, x) => sum + x.amount, 0);
+    setText("balance", money(closing));
+    setText("totalIncome", money(totalIncome));
+    setText("totalInvoice", money(invoice));
+    setText("totalExpenses", money(debitActual + debitPlanned));
+    setText("todayBalance", money(getTodayBalance()));
 
-        const invoice = getInvoiceAmount();
-        const opening = getOpeningBalance(selectedDate);
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    setText("currentMonth", monthLabel);
+    setText("balanceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
+    setText("invoiceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
 
-        const totalIncome = incomeActual + incomePlanned;
-        const totalExpenses = debitActual + debitPlanned + invoice;
-        const closing = opening + totalIncome - totalExpenses;
+    const initialBalanceEl = $("initialBalance");
+    if (initialBalanceEl) initialBalanceEl.value = opening.toFixed(2);
 
-        const setText = (id, value) => {
-            const el = $(id);
-            if (el) el.textContent = value;
-        };
+    const hasManualBalance = Object.prototype.hasOwnProperty.call(initialBalances, monthKey(selectedDate));
+    setText("initialBalanceInfo",
+        hasManualBalance
+            ? "Este mês possui um saldo inicial definido manualmente. Para voltar ao automático, exclua esse ajuste."
+            : "Preenchido automaticamente com o saldo final do mês anterior. Você pode alterar e salvar manualmente."
+    );
 
-        setText("balance", money(closing));
-        setText("totalIncome", money(totalIncome));
-        setText("totalInvoice", money(invoice));
-        setText("totalExpenses", money(debitActual + debitPlanned));
-        setText("todayBalance", money(getTodayBalance()));
+    setText("invoiceAmount", money(invoice));
+    setText("invoiceDue", formatDate(getInvoiceDueDate()));
 
-        setText("currentMonth",
-            selectedDate.toLocaleDateString("pt-BR", {
-                month: "long",
-                year: "numeric"
-            })
-        );
-
-        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-
-        setText("balanceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
-        setText("invoiceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
-
-        const initialBalanceEl = $("initialBalance");
-        if (initialBalanceEl) initialBalanceEl.value = opening.toFixed(2);
-
-        const hasManualBalance = Object.prototype.hasOwnProperty.call(
-            initialBalances,
-            monthKey(selectedDate)
-        );
-
-        setText("initialBalanceInfo",
-            hasManualBalance
-                ? "Este mês possui um saldo inicial definido manualmente. Para voltar ao automático, exclua esse ajuste."
-                : "Preenchido automaticamente com o saldo final do mês anterior. Você pode alterar e salvar manualmente."
-        );
-
-        setText("invoiceAmount", money(invoice));
-        setText("invoiceDue", formatDate(getInvoiceDueDate()));
-
-        renderInvoiceSettings();
-        renderDailyCalendar(actual, scheduled);
-    } catch (error) {
-        console.error("Erro em updateDashboard:", error);
-    }
+    renderInvoiceSettings();
+    renderDailyCalendar(actual, scheduled);
 }
 
 // ==========================================
-// NAVEGAÇÃO ENTRE ABAS (Painel / Dashboard)
+// DASHBOARD
+// ==========================================
+
+function getDashRange() {
+    const now = new Date();
+
+    if (dashPeriod.customStart || dashPeriod.customEnd) {
+        const start = dashPeriod.customStart
+            ? parseDate(dashPeriod.customStart + "-01")
+            : new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
+        const endParsed = dashPeriod.customEnd ? parseDate(dashPeriod.customEnd + "-01") : null;
+        const end = endParsed
+            ? new Date(endParsed.getFullYear(), endParsed.getMonth() + 1, 0, 12)
+            : new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
+        return { start, end };
+    }
+
+    if (dashPeriod.yearOnly) {
+        return {
+            start: new Date(now.getFullYear(), 0, 1, 12),
+            end: new Date(now.getFullYear(), 11, 31, 12)
+        };
+    }
+
+    const months = dashPeriod.months || 12;
+    const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1, 12);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
+    return { start, end };
+}
+
+function forEachMonthInRange(start, end, cb) {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+    const limit = new Date(end.getFullYear(), end.getMonth(), 1, 12);
+    while (cursor <= limit) {
+        cb(new Date(cursor.getFullYear(), cursor.getMonth(), 1, 12));
+        cursor.setMonth(cursor.getMonth() + 1);
+    }
+}
+
+function computeMonthTotals(date) {
+    const key = monthKey(date);
+    const actual = transactions.filter(item => item.date.startsWith(key));
+    const scheduled = getOccurrencesForMonth(date);
+
+    const incomeActual = actual.filter(x => x.type === "income").reduce((s, x) => s + x.amount, 0);
+    const incomePlanned = scheduled.filter(x => x.type === "income").reduce((s, x) => s + x.amount, 0);
+    const debitActual = actual.filter(x => x.type === "debit").reduce((s, x) => s + x.amount, 0);
+    const debitPlanned = scheduled.filter(x => x.type === "debit").reduce((s, x) => s + x.amount, 0);
+
+    const invoice = getInvoiceAmount(date);
+    const opening = getOpeningBalance(date);
+    const closing = opening + (incomeActual + incomePlanned) - (debitActual + debitPlanned + invoice);
+
+    return { key, date, income: incomeActual + incomePlanned, debit: debitActual + debitPlanned, invoice, opening, closing };
+}
+
+function renderDashboard() {
+    try {
+        const { start, end } = getDashRange();
+
+        let totalIncome = 0;
+        let totalDebit = 0;
+        let totalInvoice = 0;
+
+        forEachMonthInRange(start, end, m => {
+            const t = computeMonthTotals(m);
+            totalIncome += t.income;
+            totalDebit += t.debit;
+            totalInvoice += t.invoice;
+        });
+
+        const balance = totalIncome - totalDebit - totalInvoice;
+        const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+
+        setText("dashKpiIncome", money(totalIncome));
+        setText("dashKpiDebit", money(totalDebit));
+        setText("dashKpiInvoice", money(totalInvoice));
+        setText("dashKpiBalance", money(balance));
+
+        const percent = totalIncome > 0 ? Math.min(100, Math.round((totalDebit / totalIncome) * 100)) : 0;
+        setText("dashComparePercent", `${percent}%`);
+
+        const fill = $("dashCompareFill");
+        if (fill) {
+            fill.style.width = `${percent}%`;
+            fill.classList.remove("warn", "danger");
+            if (percent >= 100) fill.classList.add("danger");
+            else if (percent >= 70) fill.classList.add("warn");
+        }
+
+        const hint = $("dashCompareHint");
+        if (hint) {
+            if (totalIncome === 0 && totalDebit === 0) {
+                hint.textContent = "Sem lançamentos no período.";
+            } else if (percent < 70) {
+                hint.textContent = `Você está gastando ${percent}% do que entra. Boa margem.`;
+            } else if (percent < 100) {
+                hint.textContent = `Atenção: ${percent}% da sua entrada está indo para saídas no débito.`;
+            } else {
+                hint.textContent = `Alerta: suas saídas no débito superam as entradas.`;
+            }
+        }
+
+        const periodLabel = $("dashPeriodLabel");
+        if (periodLabel) {
+            const fmt = d => d.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+            periodLabel.textContent = `${fmt(start)} → ${fmt(end)}`;
+        }
+
+        renderProjection();
+        updateDashShortcutButtons();
+    } catch (error) {
+        console.error("Erro ao renderizar dashboard:", error);
+    }
+}
+
+function renderProjection() {
+    const container = $("projectionList");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const today = new Date();
+    const baseDate = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+
+    for (let i = 0; i < dashProjectionMonths; i++) {
+        const monthDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1, 12);
+        const t = computeMonthTotals(monthDate);
+
+        const row = document.createElement("div");
+        row.className = "dash-projection-row";
+
+        const label = monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const nameEl = document.createElement("strong");
+        nameEl.textContent = label;
+
+        const valueEl = document.createElement("span");
+        valueEl.className = "dash-projection-value";
+        if (t.closing < 0) valueEl.classList.add("negative");
+        valueEl.textContent = money(t.closing);
+
+        row.append(nameEl, valueEl);
+        container.appendChild(row);
+    }
+}
+
+function updateDashShortcutButtons() {
+    document.querySelectorAll(".dash-shortcut").forEach(btn => {
+        const months = btn.getAttribute("data-months");
+        const range = btn.getAttribute("data-range");
+        let active = false;
+
+        if (months && !dashPeriod.customStart && !dashPeriod.customEnd && !dashPeriod.yearOnly) {
+            active = Number(months) === Number(dashPeriod.months);
+        }
+        if (range === "year" && dashPeriod.yearOnly) active = true;
+        if (range === "custom" && (dashPeriod.customStart || dashPeriod.customEnd)) active = true;
+
+        btn.classList.toggle("active", active);
+    });
+}
+
+function applyDashPreset(months) {
+    dashPeriod = { months };
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.add("hidden");
+    renderDashboard();
+}
+
+function applyDashYear() {
+    dashPeriod = { yearOnly: true };
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.add("hidden");
+    renderDashboard();
+}
+
+function applyDashCustom() {
+    const customEl = $("dashCustomRange");
+    if (customEl) customEl.classList.remove("hidden");
+
+    const startEl = $("dashStart");
+    const endEl = $("dashEnd");
+    const now = new Date();
+
+    if (startEl && !startEl.value) {
+        const d = new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
+        startEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    }
+    if (endEl && !endEl.value) {
+        endEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    dashPeriod = {
+        customStart: startEl ? startEl.value : null,
+        customEnd: endEl ? endEl.value : null
+    };
+
+    renderDashboard();
+}
+
+safeOn("dashStart", "change", applyDashCustom);
+safeOn("dashEnd", "change", applyDashCustom);
+
+safeOn("toggleProjectionButton", "click", () => {
+    projectionSectionOpen = !projectionSectionOpen;
+    const section = $("projectionSection");
+    if (section) section.classList.toggle("hidden", !projectionSectionOpen);
+    const icon = $("toggleProjectionIcon");
+    if (icon) icon.textContent = projectionSectionOpen ? "▾" : "▸";
+    if (projectionSectionOpen) renderProjection();
+});
+
+safeOn("projectionMonths", "input", () => {
+    const el = $("projectionMonths");
+    if (!el) return;
+    const v = Number(el.value);
+    if (Number.isFinite(v) && v >= 1 && v <= 24) {
+        dashProjectionMonths = v;
+        renderProjection();
+    }
+});
+
+safeOn("dashOpenTransactionsMenu", "click", () => openTransactionsMenu());
+safeOn("dashOpenRecurringMenu", "click", () => openRecurringMenu());
+
+function bindDashShortcuts() {
+    document.querySelectorAll(".dash-shortcut").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const months = btn.getAttribute("data-months");
+            const range = btn.getAttribute("data-range");
+
+            if (months) applyDashPreset(Number(months));
+            else if (range === "year") applyDashYear();
+            else if (range === "custom") applyDashCustom();
+        });
+    });
+}
+
+// ==========================================
+// ABAS
 // ==========================================
 
 function setActiveTab(view) {
@@ -1407,13 +1388,21 @@ function setActiveTab(view) {
     if (painelView) painelView.classList.toggle("hidden", view !== "painel");
     if (dashboardView) dashboardView.classList.toggle("hidden", view !== "dashboard");
     if (painelHeader) painelHeader.classList.toggle("hidden", view !== "painel");
+
+    if (view === "dashboard") renderDashboard();
+    else updatePainel();
+}
+
+function refreshCurrentView() {
+    if (currentView === "dashboard") renderDashboard();
+    else updatePainel();
 }
 
 safeOn("tabPainel", "click", () => setActiveTab("painel"));
 safeOn("tabDashboard", "click", () => setActiveTab("dashboard"));
 
 // ==========================================
-// CALENDÁRIO FINANCEIRO
+// CALENDÁRIO
 // ==========================================
 
 function renderDailyCalendar(actual, scheduled) {
@@ -1423,9 +1412,7 @@ function renderDailyCalendar(actual, scheduled) {
 
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
-
     const days = new Date(year, month + 1, 0).getDate();
-
     const today = localDate(new Date());
 
     const invoiceAmount = getInvoiceAmount();
@@ -1435,18 +1422,13 @@ function renderDailyCalendar(actual, scheduled) {
 
     for (let day = 1; day <= days; day++) {
         const date = localDate(new Date(year, month, day, 12));
-
         const values = getDayValues(date, actual, scheduled);
-
         let debit = values.debit;
-
         if (date === invoiceDueDate) debit += invoiceAmount;
-
         runningBalance += values.income - debit;
 
         const row = document.createElement("div");
         row.className = "daily-row";
-
         if (date === today) row.classList.add("today");
 
         const dayElement = document.createElement("div");
@@ -1456,60 +1438,32 @@ function renderDailyCalendar(actual, scheduled) {
         dayNumber.textContent = String(day).padStart(2, "0");
 
         const weekday = document.createElement("small");
-        weekday.textContent = parseDate(date).toLocaleDateString(
-            "pt-BR",
-            { weekday: "short" }
-        );
+        weekday.textContent = parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" });
 
         dayElement.append(dayNumber, weekday);
 
-        const incomeCell = createEditableCell(
-            values.income, "income-cell", "income", date
-        );
-
-        const creditCell = createEditableCell(
-            values.credit, "credit-cell", "credit", date
-        );
-
-        const debitCell = createEditableCell(
-            debit,
-            "debit-cell",
-            "debit",
-            date,
-            date === invoiceDueDate && invoiceAmount > 0
-                ? "Inclui a fatura do cartão"
-                : ""
+        const incomeCell = createEditableCell(values.income, "income-cell", "income", date);
+        const creditCell = createEditableCell(values.credit, "credit-cell", "credit", date);
+        const debitCell = createEditableCell(debit, "debit-cell", "debit", date,
+            date === invoiceDueDate && invoiceAmount > 0 ? "Inclui a fatura do cartão" : ""
         );
 
         const balanceCell = document.createElement("div");
         balanceCell.className = "money-cell balance-cell";
-
         if (runningBalance < 0) balanceCell.classList.add("negative");
-
         balanceCell.textContent = money(runningBalance);
 
         row.append(dayElement, incomeCell, creditCell, debitCell, balanceCell);
-
         container.appendChild(row);
     }
 }
 
-// ==========================================
-// LANÇAMENTO PELO CALENDÁRIO
-// ==========================================
-
 function createEditableCell(value, className, type, date, tooltip = "") {
     const cell = document.createElement("div");
-
     cell.className = `money-cell ${className}`;
     cell.textContent = value > 0 ? money(value) : "+";
-
     cell.title = tooltip || "Toque para ver e gerenciar os lançamentos";
-
-    cell.addEventListener("click", () => {
-        openDayTransactionsModal(date, type);
-    });
-
+    cell.addEventListener("click", () => openDayTransactionsModal(date, type));
     return cell;
 }
 
@@ -1518,11 +1472,10 @@ function openDayTransactionsModal(date, type) {
     const list = $("dayTransactionsList");
     if (!modal || !list) return;
 
-    $("dayModalTitle").textContent = `Lançamentos de ${formatDate(date)}`;
+    const title = $("dayModalTitle");
+    if (title) title.textContent = `Lançamentos de ${formatDate(date)}`;
 
-    const actual = transactions.filter(item =>
-        item.date.startsWith(monthKey(selectedDate))
-    );
+    const actual = transactions.filter(item => item.date.startsWith(monthKey(selectedDate)));
     const scheduled = getMonthlyOccurrences();
     const values = getDayValues(date, actual, scheduled);
 
@@ -1530,21 +1483,12 @@ function openDayTransactionsModal(date, type) {
     const invoiceDueDate = getInvoiceDueDate();
     const isInvoiceDay = date === invoiceDueDate && invoiceAmount > 0;
 
-    const labels = {
-        income: "Entrada",
-        credit: "Crédito",
-        debit: "Débito"
-    };
+    const labels = { income: "Entrada", credit: "Crédito", debit: "Débito" };
 
     let items = [];
-
-    if (type === "income") {
-        items = values.all.filter(x => x.type === "income");
-    } else if (type === "credit") {
-        items = values.all.filter(x => x.type === "credit");
-    } else if (type === "debit") {
-        items = values.all.filter(x => x.type === "debit");
-    }
+    if (type === "income") items = values.all.filter(x => x.type === "income");
+    else if (type === "credit") items = values.all.filter(x => x.type === "credit");
+    else if (type === "debit") items = values.all.filter(x => x.type === "debit");
 
     list.innerHTML = "";
 
@@ -1566,12 +1510,9 @@ function openDayTransactionsModal(date, type) {
 
             const details = document.createElement("small");
             const catName = getCategoryName(item.type, item.categoryId);
-
-            if (item.occurrenceDate) {
-                details.textContent = `${labels[item.type]} • ${catName} • Recorrente`;
-            } else {
-                details.textContent = `${labels[item.type]} • ${catName}`;
-            }
+            details.textContent = item.occurrenceDate
+                ? `${labels[item.type]} • ${catName} • Recorrente`
+                : `${labels[item.type]} • ${catName}`;
 
             info.append(name, details);
 
@@ -1580,19 +1521,13 @@ function openDayTransactionsModal(date, type) {
 
             const value = document.createElement("span");
             value.className = "item-value " +
-                (item.type === "income" ? "green" :
-                 item.type === "credit" ? "blue" : "red");
-
-            value.textContent =
-                `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+                (item.type === "income" ? "green" : item.type === "credit" ? "blue" : "red");
+            value.textContent = `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
 
             if (!item.occurrenceDate) {
                 value.style.cursor = "pointer";
                 value.style.textDecoration = "underline dashed";
-                value.title = "Clique para editar o valor";
-                value.addEventListener("click", () => {
-                    editTransaction(item);
-                });
+                value.addEventListener("click", () => editTransaction(item));
             }
 
             actions.append(value);
@@ -1601,24 +1536,18 @@ function openDayTransactionsModal(date, type) {
                 const remove = document.createElement("button");
                 remove.className = "delete-button";
                 remove.textContent = "✕";
-                remove.title = "Excluir lançamento";
-
                 remove.addEventListener("click", () => {
                     if (item.installmentGroupId) {
-                        if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
-                            return;
-                        }
+                        if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) return;
                         transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
                     } else {
                         if (!confirm("Excluir este lançamento?")) return;
                         transactions = transactions.filter(x => x.id !== item.id);
                     }
-
                     saveData();
-                    updateDashboard();
+                    refreshCurrentView();
                     closeDayModal();
                 });
-
                 actions.append(remove);
             }
 
@@ -1632,32 +1561,30 @@ function openDayTransactionsModal(date, type) {
 
             const info = document.createElement("div");
             info.className = "item-info";
-
             const name = document.createElement("strong");
             name.textContent = "Fatura do cartão";
-
             const details = document.createElement("small");
             details.textContent = "Débito";
-
             info.append(name, details);
 
             const actions = document.createElement("div");
             actions.className = "item-actions";
-
             const value = document.createElement("span");
             value.className = "item-value red";
             value.textContent = `- ${money(invoiceAmount)}`;
-
             actions.append(value);
             row.append(info, actions);
             list.appendChild(row);
         }
     }
 
-    $("addDayTransactionButton").onclick = () => {
-        closeDayModal();
-        openTransactionForm(type, date);
-    };
+    const addBtn = $("addDayTransactionButton");
+    if (addBtn) {
+        addBtn.onclick = () => {
+            closeDayModal();
+            openTransactionForm(type, date);
+        };
+    }
 
     modal.classList.remove("hidden");
 }
@@ -1669,22 +1596,18 @@ function closeDayModal() {
 
 function editTransaction(item) {
     if (item.installmentGroupId) {
-        const installmentInfo = item.installmentNumber && item.installmentTotal
-            ? ` (parcela ${item.installmentNumber}/${item.installmentTotal})`
-            : "";
+        const info = item.installmentNumber && item.installmentTotal
+            ? ` (parcela ${item.installmentNumber}/${item.installmentTotal})` : "";
         const novoValorStr = prompt(
-            `Editar valor da parcela de "${item.description}"${installmentInfo}.\n\nDigite o novo valor desta parcela:`,
+            `Editar valor da parcela de "${item.description}"${info}.\n\nDigite o novo valor desta parcela:`,
             item.amount
         );
-
         if (novoValorStr === null) return;
-
         const novoValor = parseFloat(novoValorStr.replace(",", "."));
-
         if (!isNaN(novoValor) && novoValor > 0) {
             item.amount = Math.round(novoValor * 100) / 100;
             saveData();
-            updateDashboard();
+            refreshCurrentView();
             closeDayModal();
         } else if (novoValorStr.trim() !== "") {
             alert("Valor inválido.");
@@ -1696,18 +1619,13 @@ function editTransaction(item) {
         `Editar valor de "${item.description}".\n\nDigite o novo valor (ou deixe em branco para manter):`,
         item.amount
     );
-
     if (novoValorStr === null) return;
-
     const novoValor = parseFloat(novoValorStr.replace(",", "."));
-
     if (!isNaN(novoValor) && novoValor > 0) {
         const index = transactions.findIndex(x => x.id === item.id);
-        if (index !== -1) {
-            transactions[index].amount = Math.round(novoValor * 100) / 100;
-        }
+        if (index !== -1) transactions[index].amount = Math.round(novoValor * 100) / 100;
         saveData();
-        updateDashboard();
+        refreshCurrentView();
         closeDayModal();
     } else if (novoValorStr.trim() !== "") {
         alert("Valor inválido.");
@@ -1715,17 +1633,15 @@ function editTransaction(item) {
 }
 
 // ==========================================
-// SUGESTÕES DE DESCRIÇÃO (DATALIST)
+// DATALISTS
 // ==========================================
 
 function populateDescriptionOptions(targetInputId, datalistId) {
     const input = $(targetInputId);
     const datalist = $(datalistId);
-
     if (!input || !datalist) return;
 
     datalist.innerHTML = "";
-
     savedDescriptions.forEach(name => {
         const opt = document.createElement("option");
         opt.value = name;
@@ -1736,14 +1652,12 @@ function populateDescriptionOptions(targetInputId, datalistId) {
 function attachDatalist(inputId, datalistId) {
     const input = $(inputId);
     const datalist = $(datalistId);
-
     if (!input || !datalist) return;
-
     input.setAttribute("list", datalistId);
 }
 
 // ==========================================
-// FORMULÁRIO DE NOVO LANÇAMENTO (CALENDÁRIO)
+// FORMULÁRIOS DE LANÇAMENTO
 // ==========================================
 
 function openTransactionForm(type, date) {
@@ -1753,15 +1667,17 @@ function openTransactionForm(type, date) {
     const modal = $("transactionFormModal");
     if (!modal) return;
 
-    $("transactionFormTitle").textContent = "Novo lançamento";
-    $("transactionDescription").value = "";
-    $("transactionAmount").value = "";
-    $("transactionDate").value = date;
-    $("transactionType").value = type;
-    $("transactionInstallments").value = "1";
+    const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
+    setVal("transactionDescription", "");
+    setVal("transactionAmount", "");
+    setVal("transactionDate", date);
+    setVal("transactionType", type);
+    setVal("transactionInstallments", "1");
+
+    const title = $("transactionFormTitle");
+    if (title) title.textContent = "Novo lançamento";
 
     populateCategorySelect("transactionCategory", type, OUTROS_ID);
-
     updateInstallmentVisibility();
     populateDescriptionOptions("transactionDescription", "transactionDescriptionList");
 
@@ -1783,13 +1699,11 @@ function updateInstallmentVisibility() {
     if (!typeEl || !container) return;
 
     const type = typeEl.value;
-
-    if (type === "credit") {
-        container.classList.remove("hidden");
-    } else {
+    if (type === "credit") container.classList.remove("hidden");
+    else {
         container.classList.add("hidden");
-        const installmentsEl = $("transactionInstallments");
-        if (installmentsEl) installmentsEl.value = "1";
+        const instEl = $("transactionInstallments");
+        if (instEl) instEl.value = "1";
     }
 
     const catEl = $("transactionCategory");
@@ -1806,9 +1720,7 @@ safeOn("transactionForm", "submit", event => {
     const totalAmount = Number($("transactionAmount").value);
     const type = $("transactionType").value;
     const date = $("transactionDate").value;
-    const installments = type === "credit"
-        ? Number($("transactionInstallments").value)
-        : 1;
+    const installments = type === "credit" ? Number($("transactionInstallments").value) : 1;
     const categoryId = normalizeCategoryId(type, $("transactionCategory").value);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
@@ -1822,30 +1734,22 @@ safeOn("transactionForm", "submit", event => {
         const baseDate = parseDate(date);
         const installmentAmount = Math.round((totalAmount / installments) * 100) / 100;
         const groupId = makeId();
-
         let accumulated = 0;
 
         for (let i = 0; i < installments; i++) {
             const installmentDate = new Date(
-                baseDate.getFullYear(),
-                baseDate.getMonth() + i,
-                baseDate.getDate(),
-                12
+                baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12
             );
-
             const isLast = i === installments - 1;
             const amount = isLast
                 ? Math.round((totalAmount - accumulated) * 100) / 100
                 : installmentAmount;
-
             accumulated += amount;
 
             transactions.push({
                 id: makeId(),
                 description: `${description} (${i + 1}/${installments})`,
-                amount,
-                type: "credit",
-                categoryId,
+                amount, type: "credit", categoryId,
                 date: localDate(installmentDate),
                 installmentGroupId: groupId,
                 installmentNumber: i + 1,
@@ -1855,34 +1759,27 @@ safeOn("transactionForm", "submit", event => {
         }
     } else {
         transactions.push({
-            id: makeId(),
-            description,
+            id: makeId(), description,
             amount: Math.round(totalAmount * 100) / 100,
-            type,
-            categoryId,
-            date
+            type, categoryId, date
         });
     }
 
     rebuildSavedDescriptions();
-
     saveData();
-    updateDashboard();
+    refreshCurrentView();
     closeTransactionForm();
 });
 
 // ==========================================
-// MENU DE LANÇAMENTOS DO MÊS
+// MENU DE LANÇAMENTOS
 // ==========================================
 
 function openTransactionsMenu() {
     const modal = $("transactionsMenu");
     if (!modal) return;
     modal.classList.remove("hidden");
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
     const label = $("transactionsMonthLabel");
     if (label) label.textContent = `Lançamentos de ${monthLabel}`;
 }
@@ -1894,7 +1791,6 @@ function closeTransactionsMenu() {
 
 function openTransactionsList(type) {
     currentTransactionsType = type;
-
     const labels = {
         income: "Entradas do mês",
         credit: "Saídas no crédito do mês",
@@ -1904,12 +1800,9 @@ function openTransactionsList(type) {
     const title = $("transactionsListTitle");
     if (title) title.textContent = labels[type];
 
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
-    const monthLabelEl = $("transactionsListMonthLabel");
-    if (monthLabelEl) monthLabelEl.textContent = `Lançamentos de ${monthLabel}`;
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const label = $("transactionsListMonthLabel");
+    if (label) label.textContent = `Lançamentos de ${monthLabel}`;
 
     const formContainer = $("transactionFormContainer");
     if (formContainer) formContainer.classList.add("hidden");
@@ -1933,8 +1826,7 @@ function renderTransactionsList() {
     container.innerHTML = "";
 
     const monthTransactions = transactions.filter(item =>
-        item.date.startsWith(monthKey(selectedDate)) &&
-        item.type === currentTransactionsType
+        item.date.startsWith(monthKey(selectedDate)) && item.type === currentTransactionsType
     );
 
     if (monthTransactions.length === 0) {
@@ -1945,76 +1837,63 @@ function renderTransactionsList() {
         return;
     }
 
-    monthTransactions
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .forEach(item => {
-            const row = document.createElement("div");
-            row.className = "planning-item";
+    monthTransactions.sort((a, b) => a.date.localeCompare(b.date)).forEach(item => {
+        const row = document.createElement("div");
+        row.className = "planning-item";
 
-            const info = document.createElement("div");
-            info.className = "item-info";
+        const info = document.createElement("div");
+        info.className = "item-info";
 
-            const name = document.createElement("strong");
-            name.textContent = item.description;
+        const name = document.createElement("strong");
+        name.textContent = item.description;
 
-            const details = document.createElement("small");
-            let detailText = formatDate(item.date);
-            detailText += ` • ${getCategoryName(item.type, item.categoryId)}`;
-            if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
-                detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
-            }
-            details.textContent = detailText;
+        const details = document.createElement("small");
+        let detailText = formatDate(item.date);
+        detailText += ` • ${getCategoryName(item.type, item.categoryId)}`;
+        if (item.installmentGroupId) {
+            detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
+        }
+        details.textContent = detailText;
 
-            info.append(name, details);
+        info.append(name, details);
 
-            const actions = document.createElement("div");
-            actions.className = "item-actions";
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
 
-            const value = document.createElement("span");
-            value.className = "item-value " +
-                (item.type === "income" ? "green" :
-                 item.type === "credit" ? "blue" : "red");
-            value.textContent =
-                `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+        const value = document.createElement("span");
+        value.className = "item-value " +
+            (item.type === "income" ? "green" : item.type === "credit" ? "blue" : "red");
+        value.textContent = `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
 
-            const editBtn = document.createElement("button");
-            editBtn.className = "outline-button";
-            editBtn.textContent = "Editar";
-            editBtn.addEventListener("click", () => {
-                editTransaction(item);
-                renderTransactionsList();
-            });
-
-            const remove = document.createElement("button");
-            remove.className = "delete-button";
-            remove.textContent = "✕";
-            remove.title = "Excluir lançamento";
-
-            remove.addEventListener("click", () => {
-                if (item.installmentGroupId) {
-                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
-                        return;
-                    }
-                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
-                } else {
-                    if (!confirm("Excluir este lançamento?")) return;
-                    transactions = transactions.filter(x => x.id !== item.id);
-                }
-
-                saveData();
-                updateDashboard();
-                renderTransactionsList();
-            });
-
-            actions.append(value, editBtn, remove);
-            row.append(info, actions);
-            container.appendChild(row);
+        const editBtn = document.createElement("button");
+        editBtn.className = "outline-button";
+        editBtn.textContent = "Editar";
+        editBtn.addEventListener("click", () => {
+            editTransaction(item);
+            renderTransactionsList();
         });
-}
 
-// ==========================================
-// FORMULÁRIO DO MENU DE LANÇAMENTOS DO MÊS
-// ==========================================
+        const remove = document.createElement("button");
+        remove.className = "delete-button";
+        remove.textContent = "✕";
+        remove.addEventListener("click", () => {
+            if (item.installmentGroupId) {
+                if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) return;
+                transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
+            } else {
+                if (!confirm("Excluir este lançamento?")) return;
+                transactions = transactions.filter(x => x.id !== item.id);
+            }
+            saveData();
+            refreshCurrentView();
+            renderTransactionsList();
+        });
+
+        actions.append(value, editBtn, remove);
+        row.append(info, actions);
+        container.appendChild(row);
+    });
+}
 
 function openStandaloneTransactionForm() {
     const formContainer = $("transactionFormContainer");
@@ -2024,11 +1903,10 @@ function openStandaloneTransactionForm() {
 
     const dateEl = $("standaloneDate");
     if (dateEl) dateEl.value = suggestedDateInSelectedMonth();
-    const installmentsEl = $("standaloneInstallments");
-    if (installmentsEl) installmentsEl.value = "1";
+    const instEl = $("standaloneInstallments");
+    if (instEl) instEl.value = "1";
 
     populateCategorySelect("standaloneCategory", currentTransactionsType, OUTROS_ID);
-
     updateStandaloneInstallmentVisibility();
     populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 }
@@ -2037,12 +1915,11 @@ function updateStandaloneInstallmentVisibility() {
     const container = $("standaloneInstallmentContainer");
     if (!container) return;
 
-    if (currentTransactionsType === "credit") {
-        container.classList.remove("hidden");
-    } else {
+    if (currentTransactionsType === "credit") container.classList.remove("hidden");
+    else {
         container.classList.add("hidden");
-        const installmentsEl = $("standaloneInstallments");
-        if (installmentsEl) installmentsEl.value = "1";
+        const instEl = $("standaloneInstallments");
+        if (instEl) instEl.value = "1";
     }
 }
 
@@ -2058,9 +1935,7 @@ safeOn("standaloneTransactionForm", "submit", event => {
     const totalAmount = Number($("standaloneAmount").value);
     const type = currentTransactionsType;
     const date = $("standaloneDate").value;
-    const installments = type === "credit"
-        ? Number($("standaloneInstallments").value)
-        : 1;
+    const installments = type === "credit" ? Number($("standaloneInstallments").value) : 1;
     const categoryId = normalizeCategoryId(type, $("standaloneCategory").value);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
@@ -2074,30 +1949,22 @@ safeOn("standaloneTransactionForm", "submit", event => {
         const baseDate = parseDate(date);
         const installmentAmount = Math.round((totalAmount / installments) * 100) / 100;
         const groupId = makeId();
-
         let accumulated = 0;
 
         for (let i = 0; i < installments; i++) {
             const installmentDate = new Date(
-                baseDate.getFullYear(),
-                baseDate.getMonth() + i,
-                baseDate.getDate(),
-                12
+                baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12
             );
-
             const isLast = i === installments - 1;
             const amount = isLast
                 ? Math.round((totalAmount - accumulated) * 100) / 100
                 : installmentAmount;
-
             accumulated += amount;
 
             transactions.push({
                 id: makeId(),
                 description: `${description} (${i + 1}/${installments})`,
-                amount,
-                type: "credit",
-                categoryId,
+                amount, type: "credit", categoryId,
                 date: localDate(installmentDate),
                 installmentGroupId: groupId,
                 installmentNumber: i + 1,
@@ -2107,19 +1974,15 @@ safeOn("standaloneTransactionForm", "submit", event => {
         }
     } else {
         transactions.push({
-            id: makeId(),
-            description,
+            id: makeId(), description,
             amount: Math.round(totalAmount * 100) / 100,
-            type,
-            categoryId,
-            date
+            type, categoryId, date
         });
     }
 
     rebuildSavedDescriptions();
-
     saveData();
-    updateDashboard();
+    refreshCurrentView();
 
     const form = $("standaloneTransactionForm");
     if (form) form.reset();
@@ -2129,17 +1992,14 @@ safeOn("standaloneTransactionForm", "submit", event => {
 });
 
 // ==========================================
-// MENU DE LANÇAMENTOS RECORRENTES
+// RECORRENTES (menu)
 // ==========================================
 
 function openRecurringMenu() {
     const modal = $("recurringMenu");
     if (!modal) return;
     modal.classList.remove("hidden");
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
     const label = $("recurringMonthLabel");
     if (label) label.textContent = `Válidos em ${monthLabel}`;
 }
@@ -2151,22 +2011,17 @@ function closeRecurringMenu() {
 
 function openRecurringList(type) {
     currentRecurringType = type;
-
     const labels = {
         income: "Entradas recorrentes",
         credit: "Saídas no crédito recorrentes",
         debit: "Saídas no débito recorrentes"
     };
-
     const title = $("recurringListTitle");
     if (title) title.textContent = labels[type];
 
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
-    const monthLabelEl = $("recurringListMonthLabel");
-    if (monthLabelEl) monthLabelEl.textContent = `Válidos em ${monthLabel}`;
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const label = $("recurringListMonthLabel");
+    if (label) label.textContent = `Válidos em ${monthLabel}`;
 
     const formContainer = $("recurringFormContainer");
     if (formContainer) formContainer.classList.add("hidden");
@@ -2186,12 +2041,10 @@ function closeRecurringListModal() {
 function renderRecurringList() {
     const container = $("recurringListContainer");
     if (!container) return;
-
     container.innerHTML = "";
 
     const activeItems = recurring.filter(item =>
-        item.type === currentRecurringType &&
-        recurringIsActiveInMonth(item, selectedDate)
+        item.type === currentRecurringType && recurringIsActiveInMonth(item, selectedDate)
     );
 
     if (activeItems.length === 0) {
@@ -2202,34 +2055,8 @@ function renderRecurringList() {
         return;
     }
 
-    const withOccurrence = activeItems.map(item => {
-        const result = recurringIsActiveInMonth(item, selectedDate);
-        return {
-            item,
-            occurrence: result ? result.occurrence : "",
-            amount: result ? result.amount : item.versions[0].amount
-        };
-    });
-
-    withOccurrence.sort((a, b) => {
-        if (a.occurrence !== b.occurrence) {
-            return a.occurrence.localeCompare(b.occurrence);
-        }
-        if (currentRecurringType === "income") {
-            return b.amount - a.amount;
-        }
-        return a.amount - b.amount;
-    });
-
-    withOccurrence.forEach(entry => {
-        container.appendChild(buildRecurringRow(entry.item));
-    });
-}
-
-function getActiveVersionDisplay(item) {
-    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
-    const version = getVersionForDate(item, monthStart);
-    return version || item.versions[item.versions.length - 1];
+    activeItems.sort((a, b) => a.description.localeCompare(b.description))
+        .forEach(item => container.appendChild(buildRecurringRow(item)));
 }
 
 function buildRecurringRow(item) {
@@ -2242,18 +2069,14 @@ function buildRecurringRow(item) {
     const name = document.createElement("strong");
     name.textContent = item.description;
 
-    const version = getActiveVersionDisplay(item);
-
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    const version = getVersionForDate(item, monthStart) || item.versions[item.versions.length - 1];
     const activeResult = recurringIsActiveInMonth(item, selectedDate);
     const displayAmount = activeResult ? activeResult.amount : version.amount;
-    const hasOverride = activeResult && activeResult.hasOverride;
 
     const details = document.createElement("small");
-    const end = version.endDate
-        ? `até ${formatDate(version.endDate)}`
-        : "sem data fim";
-    details.textContent = `${getCategoryName(item.type, item.categoryId)} • Início ${formatDate(version.startDate)} • ${end}` +
-        (hasOverride ? " • Ajustado neste mês" : "");
+    const end = version.endDate ? `até ${formatDate(version.endDate)}` : "sem data fim";
+    details.textContent = `${getCategoryName(item.type, item.categoryId)} • Início ${formatDate(version.startDate)} • ${end}`;
 
     info.append(name, details);
 
@@ -2262,74 +2085,63 @@ function buildRecurringRow(item) {
 
     const value = document.createElement("span");
     value.className = "item-value " +
-        (item.type === "income" ? "green" :
-         item.type === "credit" ? "blue" : "red");
-    value.textContent =
-        `${item.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
+        (item.type === "income" ? "green" : item.type === "credit" ? "blue" : "red");
+    value.textContent = `${item.type === "income" ? "+" : "-"} ${money(displayAmount)}`;
 
     const editBtn = document.createElement("button");
     editBtn.className = "outline-button";
     editBtn.textContent = "Editar";
-    editBtn.addEventListener("click", () => {
-        openRecurringEditModal(item);
-    });
+    editBtn.addEventListener("click", () => openRecurringEditModal(item));
 
     const remove = document.createElement("button");
     remove.className = "delete-button";
     remove.textContent = "✕";
-    remove.title = "Excluir lançamento recorrente";
-
     remove.addEventListener("click", () => {
         if (!confirm(`Excluir o lançamento recorrente "${item.description}"?`)) return;
         recurring = recurring.filter(x => x.id !== item.id);
         saveData();
-        updateDashboard();
+        refreshCurrentView();
         renderRecurringList();
     });
 
     actions.append(value, editBtn, remove);
     row.append(info, actions);
-
     return row;
 }
-
-// ==========================================
-// MODAL DE EDIÇÃO DE RECORRENTE
-// ==========================================
 
 function openRecurringEditModal(item) {
     editingRecurringId = item.id;
 
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
-    const currentVersion = getVersionForDate(item, monthStart)
-        || item.versions[item.versions.length - 1];
-
+    const currentVersion = getVersionForDate(item, monthStart) || item.versions[item.versions.length - 1];
     const overrideKey = getOverrideKey(item.id, selectedDate);
     const hasOverride = recurringMonthOverrides[overrideKey] !== undefined;
-    const currentAmount = hasOverride
-        ? recurringMonthOverrides[overrideKey]
-        : currentVersion.amount;
+    const currentAmount = hasOverride ? recurringMonthOverrides[overrideKey] : currentVersion.amount;
 
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-    $("recurringEditDescription").value = item.description;
-    $("recurringEditAmount").value = currentAmount;
-    $("recurringEditCurrentMonthLabel").textContent =
-        `Mês de edição: ${monthLabel}`;
+    const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
+    setVal("recurringEditDescription", item.description);
+    setVal("recurringEditAmount", currentAmount);
+
+    const monthEl = $("recurringEditCurrentMonthLabel");
+    if (monthEl) monthEl.textContent = `Mês de edição: ${monthLabel}`;
 
     populateCategorySelect("recurringEditCategory", item.type, item.categoryId);
 
-    $("recurringEditExplanation").textContent =
-        `Valor base atual da recorrência: ${money(currentVersion.amount)}. ` +
-        `Se marcar a opção abaixo, o novo valor será aplicado somente em ${monthLabel}. ` +
-        `Caso contrário, passará a valer de ${monthLabel} em diante.`;
+    const explEl = $("recurringEditExplanation");
+    if (explEl) {
+        explEl.textContent =
+            `Valor base atual da recorrência: ${money(currentVersion.amount)}. ` +
+            `Se marcar a opção abaixo, o novo valor será aplicado somente em ${monthLabel}. ` +
+            `Caso contrário, passará a valer de ${monthLabel} em diante.`;
+    }
 
-    $("recurringEditOnlyThisMonth").checked = hasOverride;
+    const onlyEl = $("recurringEditOnlyThisMonth");
+    if (onlyEl) onlyEl.checked = hasOverride;
 
-    $("recurringEditResetContainer").classList.toggle("hidden", !hasOverride);
+    const resetEl = $("recurringEditResetContainer");
+    if (resetEl) resetEl.classList.toggle("hidden", !hasOverride);
 
     populateDescriptionOptions("recurringEditDescription", "recurringEditDescriptionList");
 
@@ -2351,7 +2163,6 @@ safeOn("recurringEditModal", "click", event => {
 
 safeOn("recurringEditResetButton", "click", () => {
     if (!editingRecurringId) return;
-
     const overrideKey = getOverrideKey(editingRecurringId, selectedDate);
 
     if (recurringMonthOverrides[overrideKey] === undefined) {
@@ -2361,33 +2172,24 @@ safeOn("recurringEditResetButton", "click", () => {
 
     delete recurringMonthOverrides[overrideKey];
     saveData();
-    updateDashboard();
+    refreshCurrentView();
     renderRecurringList();
     closeRecurringEditModal();
 });
 
 safeOn("recurringEditForm", "submit", event => {
     event.preventDefault();
-
     if (!editingRecurringId) return;
 
     const item = recurring.find(x => x.id === editingRecurringId);
-    if (!item) {
-        closeRecurringEditModal();
-        return;
-    }
+    if (!item) { closeRecurringEditModal(); return; }
 
     const description = $("recurringEditDescription").value.trim();
     const amountValue = Number($("recurringEditAmount").value);
     const categoryId = normalizeCategoryId(item.type, $("recurringEditCategory").value);
 
-    if (!description) {
-        alert("Informe a descrição.");
-        return;
-    }
-
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-        alert("Informe um valor válido.");
+    if (!description || !Number.isFinite(amountValue) || amountValue <= 0) {
+        alert("Preencha os dados corretamente.");
         return;
     }
 
@@ -2395,8 +2197,7 @@ safeOn("recurringEditForm", "submit", event => {
     const onlyThisMonth = $("recurringEditOnlyThisMonth").checked;
 
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
-    const currentVersion = getVersionForDate(item, monthStart)
-        || item.versions[item.versions.length - 1];
+    const currentVersion = getVersionForDate(item, monthStart) || item.versions[item.versions.length - 1];
 
     item.description = description;
     item.categoryId = categoryId;
@@ -2404,26 +2205,12 @@ safeOn("recurringEditForm", "submit", event => {
 
     if (onlyThisMonth) {
         const overrideKey = getOverrideKey(item.id, selectedDate);
-
-        if (roundedValue === currentVersion.amount) {
-            delete recurringMonthOverrides[overrideKey];
-        } else {
-            recurringMonthOverrides[overrideKey] = roundedValue;
-        }
+        if (roundedValue === currentVersion.amount) delete recurringMonthOverrides[overrideKey];
+        else recurringMonthOverrides[overrideKey] = roundedValue;
     } else {
         const changeMonthStartStr = localDate(monthStart);
-
-        const previousMonthEnd = new Date(
-            monthStart.getFullYear(),
-            monthStart.getMonth(),
-            0,
-            12
-        );
-        const previousMonthEndStr = localDate(previousMonthEnd);
-
-        const sorted = [...item.versions].sort((a, b) =>
-            a.startDate.localeCompare(b.startDate)
-        );
+        const previousMonthEndStr = localDate(new Date(monthStart.getFullYear(), monthStart.getMonth(), 0, 12));
+        const sorted = [...item.versions].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
         const affectedVersion = sorted.find(v => {
             const vStart = v.startDate;
@@ -2431,58 +2218,30 @@ safeOn("recurringEditForm", "submit", event => {
             return changeMonthStartStr >= vStart && changeMonthStartStr <= vEnd;
         });
 
-        if (!affectedVersion) {
-            const laterVersion = sorted.find(v => v.startDate > changeMonthStartStr);
-            if (laterVersion) {
-                alert("Já existe uma alteração de valor posterior a esta data. Edite a versão correta.");
-                return;
-            }
-
-            item.versions.push({
-                amount: roundedValue,
-                startDate: changeMonthStartStr,
-                endDate: null
-            });
-        } else {
-            const wasOpen = !affectedVersion.endDate;
-            const originalEnd = affectedVersion.endDate;
-
+        if (affectedVersion) {
             if (roundedValue !== affectedVersion.amount) {
+                const wasOpen = !affectedVersion.endDate;
+                const originalEnd = affectedVersion.endDate;
                 affectedVersion.endDate = previousMonthEndStr;
-
-                const newVersion = {
+                item.versions.push({
                     amount: roundedValue,
                     startDate: changeMonthStartStr,
                     endDate: wasOpen ? null : originalEnd
-                };
-
-                item.versions.push(newVersion);
-
+                });
                 item.versions.sort((a, b) => a.startDate.localeCompare(b.startDate));
             }
+        } else {
+            item.versions.push({ amount: roundedValue, startDate: changeMonthStartStr, endDate: null });
+            item.versions.sort((a, b) => a.startDate.localeCompare(b.startDate));
         }
-
-        const monthPrefix = monthKey(selectedDate);
-        Object.keys(recurringMonthOverrides).forEach(k => {
-            if (!k.startsWith(`${item.id}|`)) return;
-            const keyMonth = k.split("|")[1];
-            if (keyMonth >= monthPrefix) {
-                delete recurringMonthOverrides[k];
-            }
-        });
     }
 
     rebuildSavedDescriptions();
-
     saveData();
-    updateDashboard();
+    refreshCurrentView();
     renderRecurringList();
     closeRecurringEditModal();
 });
-
-// ==========================================
-// FORMULÁRIO DE NOVO RECORRENTE
-// ==========================================
 
 safeOn("openRecurringMenu", "click", openRecurringMenu);
 safeOn("closeRecurringMenu", "click", closeRecurringMenu);
@@ -2538,23 +2297,15 @@ safeOn("recurringForm", "submit", event => {
         categoryId,
         frequency,
         dayOfMonth: parseDate(startDate).getDate(),
-        versions: [
-            {
-                amount: Math.round(amount * 100) / 100,
-                startDate,
-                endDate: null
-            }
-        ]
+        versions: [{ amount: Math.round(amount * 100) / 100, startDate, endDate: null }]
     });
 
     rebuildSavedDescriptions();
-
     saveData();
-    updateDashboard();
+    refreshCurrentView();
 
     const form = $("recurringForm");
     if (form) form.reset();
-
     const startEl = $("recurringStart");
     if (startEl) startEl.value = suggestedDateInSelectedMonth();
 
@@ -2563,21 +2314,12 @@ safeOn("recurringForm", "submit", event => {
     renderRecurringList();
 });
 
-// ==========================================
-// MENU DE LANÇAMENTOS DO MÊS (EVENTOS)
-// ==========================================
-
 safeOn("openTransactionsMenu", "click", openTransactionsMenu);
 safeOn("closeTransactionsMenu", "click", closeTransactionsMenu);
-
 safeOn("openIncomeTransactions", "click", () => openTransactionsList("income"));
 safeOn("openCreditTransactions", "click", () => openTransactionsList("credit"));
 safeOn("openDebitTransactions", "click", () => openTransactionsList("debit"));
-
-safeOn("openTransactionForm", "click", () => {
-    openStandaloneTransactionForm();
-});
-
+safeOn("openTransactionForm", "click", openStandaloneTransactionForm);
 safeOn("closeTransactionsListModal", "click", closeTransactionsListModal);
 
 safeOn("transactionsListModal", "click", event => {
@@ -2589,64 +2331,12 @@ safeOn("transactionsMenu", "click", event => {
 });
 
 // ==========================================
-// NAVEGAÇÃO ENTRE MESES
+// NAVEGAÇÃO DE MESES
 // ==========================================
 
 function navigateMonth(offset) {
-    selectedDate = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth() + offset,
-        1,
-        12
-    );
-
-    try {
-        updateDashboard();
-    } catch (e) {
-        console.error("Erro ao atualizar painel:", e);
-    }
-
-    if ($("recurringListModal") && !$("recurringListModal").classList.contains("hidden")) {
-        try {
-            renderRecurringList();
-            const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-                month: "long",
-                year: "numeric"
-            });
-            $("recurringListMonthLabel").textContent = `Válidos em ${monthLabel}`;
-        } catch (e) {
-            console.error("Erro ao atualizar lista de recorrentes:", e);
-        }
-    }
-
-    if ($("recurringMenu") && !$("recurringMenu").classList.contains("hidden")) {
-        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-        $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
-    }
-
-    if ($("transactionsListModal") && !$("transactionsListModal").classList.contains("hidden")) {
-        try {
-            renderTransactionsList();
-            const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-                month: "long",
-                year: "numeric"
-            });
-            $("transactionsListMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
-        } catch (e) {
-            console.error("Erro ao atualizar lista de lançamentos:", e);
-        }
-    }
-
-    if ($("transactionsMenu") && !$("transactionsMenu").classList.contains("hidden")) {
-        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-        $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
-    }
+    selectedDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + offset, 1, 12);
+    updatePainel();
 }
 
 safeOn("prevMonth", "click", () => navigateMonth(-1));
@@ -2655,108 +2345,52 @@ safeOn("nextMonth", "click", () => navigateMonth(1));
 safeOn("goToCurrentMonth", "click", () => {
     const now = new Date();
     selectedDate = new Date(now.getFullYear(), now.getMonth(), 1, 12);
-
-    try {
-        updateDashboard();
-    } catch (e) {
-        console.error("Erro ao atualizar painel:", e);
-    }
-
-    if ($("recurringListModal") && !$("recurringListModal").classList.contains("hidden")) {
-        try {
-            renderRecurringList();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    if ($("recurringMenu") && !$("recurringMenu").classList.contains("hidden")) {
-        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-        $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
-    }
-
-    if ($("transactionsListModal") && !$("transactionsListModal").classList.contains("hidden")) {
-        try {
-            renderTransactionsList();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    if ($("transactionsMenu") && !$("transactionsMenu").classList.contains("hidden")) {
-        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-        $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
-    }
+    updatePainel();
 });
 
 // ==========================================
-// SWIPE ENTRE MESES
+// SWIPE
 // ==========================================
 
-let touchStartX = 0;
-let touchStartY = 0;
-let touchTracking = false;
+let touchStartX = 0, touchStartY = 0, touchTracking = false;
 
 function isInteractiveTarget(target) {
     if (!target) return false;
     return !!target.closest(
-        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row"
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row, .dash-sticky"
     );
 }
 
 const swipeArea = $("mainContent");
-
 if (swipeArea) {
-    swipeArea.addEventListener("touchstart", (e) => {
-        if (e.touches.length !== 1) {
-            touchTracking = false;
-            return;
-        }
-
-        if (isInteractiveTarget(e.target)) {
-            touchTracking = false;
-            return;
-        }
-
+    swipeArea.addEventListener("touchstart", e => {
+        if (e.touches.length !== 1) { touchTracking = false; return; }
+        if (isInteractiveTarget(e.target)) { touchTracking = false; return; }
         touchTracking = true;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
     }, { passive: true });
 
-    swipeArea.addEventListener("touchend", (e) => {
+    swipeArea.addEventListener("touchend", e => {
         if (!touchTracking) return;
         touchTracking = false;
-
         const touch = e.changedTouches[0];
         if (!touch) return;
 
-        const deltaX = touch.clientX - touchStartX;
-        const deltaY = touch.clientY - touchStartY;
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        const ax = Math.abs(dx), ay = Math.abs(dy);
 
-        const absX = Math.abs(deltaX);
-        const absY = Math.abs(deltaY);
+        if (ax < 60 || ax < ay * 1.4) return;
+        if (currentView !== "painel") return;
 
-        const minDistance = 60;
-
-        if (absX < minDistance) return;
-        if (absX < absY * 1.4) return;
-
-        if (deltaX < 0) {
-            navigateMonth(1);
-        } else {
-            navigateMonth(-1);
-        }
+        if (dx < 0) navigateMonth(1);
+        else navigateMonth(-1);
     }, { passive: true });
 }
 
 // ==========================================
-// EXPANDIR/RECOLHER SEÇÕES
+// EXPANDIR SEÇÕES
 // ==========================================
 
 function setCalendarSectionOpen(open) {
@@ -2775,41 +2409,38 @@ function setBackupSectionOpen(open) {
     if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
-safeOn("toggleCalendarButton", "click", () => {
-    setCalendarSectionOpen(!calendarSectionOpen);
-});
-
-safeOn("toggleBackupButton", "click", () => {
-    setBackupSectionOpen(!backupSectionOpen);
-});
+safeOn("toggleCalendarButton", "click", () => setCalendarSectionOpen(!calendarSectionOpen));
+safeOn("toggleBackupButton", "click", () => setBackupSectionOpen(!backupSectionOpen));
 
 // ==========================================
-// EXCLUSÃO SELETIVA DE LANÇAMENTOS
+// EXCLUSÃO
 // ==========================================
 
 let deleteScope = "all";
 
 function openDeleteOptions(scope) {
     deleteScope = scope;
-
     const modal = $("deleteOptionsModal");
     if (!modal) return;
 
-    const monthName = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
+    const monthName = selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-    $("deleteModalTitle").textContent = scope === "all"
-        ? "Apagar todos os registros"
-        : "Apagar registros do mês";
+    const titleEl = $("deleteModalTitle");
+    if (titleEl) {
+        titleEl.textContent = scope === "all" ? "Apagar todos os registros" : "Apagar registros do mês";
+    }
 
-    $("deleteModalDescription").textContent = scope === "all"
-        ? "Escolha quais categorias deseja apagar de todo o aplicativo. Esta ação não pode ser desfeita."
-        : `Escolha quais categorias deseja apagar de ${monthName}. Os lançamentos recorrentes continuarão cadastrados. Esta ação não pode ser desfeita.`;
+    const descEl = $("deleteModalDescription");
+    if (descEl) {
+        descEl.textContent = scope === "all"
+            ? "Escolha quais categorias deseja apagar de todo o aplicativo. Esta ação não pode ser desfeita."
+            : `Escolha quais categorias deseja apagar de ${monthName}. Os lançamentos recorrentes continuarão cadastrados. Esta ação não pode ser desfeita.`;
+    }
 
-    $("deleteOneTimeCheckbox").checked = true;
-    $("deleteRecurringCheckbox").checked = true;
+    const oneEl = $("deleteOneTimeCheckbox");
+    if (oneEl) oneEl.checked = true;
+    const recEl = $("deleteRecurringCheckbox");
+    if (recEl) recEl.checked = true;
 
     modal.classList.remove("hidden");
 }
@@ -2830,26 +2461,14 @@ function confirmSelectedDeletion() {
 
     if (deleteScope === "all") {
         if (deleteOneTime) transactions = [];
-
-        if (deleteRecurring) {
-            recurring = [];
-            recurringMonthOverrides = {};
-        }
-
+        if (deleteRecurring) { recurring = []; recurringMonthOverrides = {}; }
         if (deleteOneTime && deleteRecurring) {
             initialBalances = {};
             invoiceSettings = {};
             savedDescriptions = [];
         }
-
-        $("backupMessage").textContent = "";
-        $("recurringMenu").classList.add("hidden");
-        $("recurringListModal").classList.add("hidden");
-        $("recurringFormContainer").classList.add("hidden");
-        $("transactionsMenu").classList.add("hidden");
-        $("transactionsListModal").classList.add("hidden");
-        $("transactionFormContainer").classList.add("hidden");
-
+        const msg = $("backupMessage");
+        if (msg) msg.textContent = "";
         selectedDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12);
     } else {
         const key = monthKey(selectedDate);
@@ -2864,30 +2483,15 @@ function confirmSelectedDeletion() {
 
         if (deleteRecurring) {
             recurring = recurring.filter(item => {
-                const firstVersion = [...item.versions].sort((a, b) =>
-                    a.startDate.localeCompare(b.startDate)
-                )[0];
-
-                const itemStart = firstVersion.startDate;
-                const lastVersionEnd = [...item.versions]
-                    .map(v => v.endDate || "9999-12-31")
-                    .sort()
-                    .pop();
-
-                const monthStart = `${monthPrefix}01`;
-                const monthEnd = `${monthPrefix}31`;
-
-                const overlaps = !(lastVersionEnd < monthStart || itemStart > monthEnd);
-
-                if (!overlaps) return true;
-
-                return false;
+                const firstVersion = [...item.versions].sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+                const lastVersionEnd = [...item.versions].map(v => v.endDate || "9999-12-31").sort().pop();
+                const mStart = `${monthPrefix}01`;
+                const mEnd = `${monthPrefix}31`;
+                return lastVersionEnd < mStart || firstVersion.startDate > mEnd;
             });
 
             Object.keys(recurringMonthOverrides).forEach(k => {
-                if (k.split("|")[1] === key) {
-                    delete recurringMonthOverrides[k];
-                }
+                if (k.split("|")[1] === key) delete recurringMonthOverrides[k];
             });
         }
 
@@ -2898,26 +2502,14 @@ function confirmSelectedDeletion() {
     }
 
     rebuildSavedDescriptions();
-
     saveData();
-
     closeDeleteOptions();
-    updateDashboard();
-
-    alert(deleteScope === "all"
-        ? "A exclusão selecionada foi concluída."
-        : "Os registros selecionados deste mês foram apagados."
-    );
+    refreshCurrentView();
+    alert(deleteScope === "all" ? "A exclusão selecionada foi concluída." : "Os registros selecionados deste mês foram apagados.");
 }
 
-safeOn("resetAppButton", "click", () => {
-    openDeleteOptions("all");
-});
-
-safeOn("resetMonthButton", "click", () => {
-    openDeleteOptions("month");
-});
-
+safeOn("resetAppButton", "click", () => openDeleteOptions("all"));
+safeOn("resetMonthButton", "click", () => openDeleteOptions("month"));
 safeOn("cancelDeleteButton", "click", closeDeleteOptions);
 safeOn("confirmDeleteButton", "click", confirmSelectedDeletion);
 
@@ -2939,19 +2531,11 @@ safeOn("recurringMenu", "click", event => {
     if (event.target === $("recurringMenu")) closeRecurringMenu();
 });
 
-// ==========================================
-// SALVAR CONFIGURAÇÕES
-// ==========================================
-
 safeOn("saveInitialBalance", "click", saveInitialBalance);
 safeOn("saveInvoiceSettings", "click", saveInvoiceConfig);
 
-// ==========================================
-// BOTÕES DE CONFIGURAÇÃO (SALDO E FATURA)
-// ==========================================
-
 safeOn("openBalanceConfig", "click", () => {
-    updateDashboard();
+    updatePainel();
     const modal = $("balanceConfigModal");
     if (modal) modal.classList.remove("hidden");
 });
@@ -2969,7 +2553,7 @@ safeOn("balanceConfigModal", "click", event => {
 });
 
 safeOn("openInvoiceConfig", "click", () => {
-    updateDashboard();
+    updatePainel();
     const modal = $("invoiceConfigModal");
     if (modal) modal.classList.remove("hidden");
 });
@@ -2987,7 +2571,7 @@ safeOn("invoiceConfigModal", "click", event => {
 });
 
 // ==========================================
-// EXPORTAÇÃO DE BACKUP
+// BACKUP
 // ==========================================
 
 safeOn("exportButton", "click", () => {
@@ -2999,30 +2583,19 @@ safeOn("exportButton", "click", () => {
         recurring
     };
 
-    const blob = new Blob(
-        [JSON.stringify(backup, null, 2)],
-        { type: "application/json" }
-    );
-
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     link.href = url;
     link.download = `backup-financeiro-${localDate(new Date())}.json`;
-
     document.body.appendChild(link);
     link.click();
     link.remove();
-
     URL.revokeObjectURL(url);
 
     const msg = $("backupMessage");
     if (msg) msg.textContent = "Backup gerado. Guarde o arquivo em uma pasta segura.";
 });
-
-// ==========================================
-// IMPORTAÇÃO DE BACKUP
-// ==========================================
 
 safeOn("importFile", "change", async event => {
     const file = event.target.files[0];
@@ -3030,14 +2603,8 @@ safeOn("importFile", "change", async event => {
 
     try {
         const data = JSON.parse(await file.text());
-
-        if (!Array.isArray(data.transactions)) {
-            throw new Error("Arquivo inválido.");
-        }
-
-        if (!confirm("A importação substituirá os dados atuais. Deseja continuar?")) {
-            return;
-        }
+        if (!Array.isArray(data.transactions)) throw new Error("Arquivo inválido.");
+        if (!confirm("A importação substituirá os dados atuais. Deseja continuar?")) return;
 
         applyDataSnapshot(data);
 
@@ -3050,22 +2617,16 @@ safeOn("importFile", "change", async event => {
         }
 
         rebuildSavedDescriptions();
-
         saveData();
-        updateDashboard();
+        refreshCurrentView();
 
         const msg = $("backupMessage");
         if (msg) msg.textContent = "Backup importado com sucesso!";
     } catch (error) {
         alert("Não foi possível importar. Verifique o arquivo JSON.");
     }
-
     event.target.value = "";
 });
-
-// ==========================================
-// BOTÕES DO GOOGLE DRIVE
-// ==========================================
 
 safeOn("googleLoginButton", "click", loginGoogle);
 safeOn("googleLogoutButton", "click", logoutGoogle);
@@ -3075,7 +2636,7 @@ safeOn("syncNowButton", "click", async () => {
 });
 
 // ==========================================
-// TEMA CLARO / ESCURO
+// TEMA
 // ==========================================
 
 (function initTheme() {
@@ -3088,348 +2649,28 @@ safeOn("syncNowButton", "click", async () => {
 
     function applyTheme(theme) {
         root.setAttribute("data-theme", theme);
-
         const icon = $("themeToggleIcon");
         if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
-
         const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) {
-            meta.setAttribute("content", theme === "dark" ? "#060b14" : "#101827");
-        }
+        if (meta) meta.setAttribute("content", theme === "dark" ? "#060b14" : "#101827");
     }
 
     const saved = localStorage.getItem(THEME_KEY);
     applyTheme(saved === "dark" || saved === "light" ? saved : getSystemTheme());
 
-    const btn = $("themeToggle");
-    if (btn) {
-        btn.addEventListener("click", () => {
-            const current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
-            const next = current === "dark" ? "light" : "dark";
-            applyTheme(next);
-            localStorage.setItem(THEME_KEY, next);
-        });
-    }
+    safeOn("themeToggle", "click", () => {
+        const current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+        const next = current === "dark" ? "light" : "dark";
+        applyTheme(next);
+        localStorage.setItem(THEME_KEY, next);
+    });
 
     if (window.matchMedia) {
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-            if (!localStorage.getItem(THEME_KEY)) {
-                applyTheme(e.matches ? "dark" : "light");
-            }
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
+            if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? "dark" : "light");
         });
     }
 })();
-
-// ==========================================
-// DASHBOARD
-// ==========================================
-
-let dashPeriod = { months: 12 };
-let dashProjectionMonths = 6;
-let projectionSectionOpen = false;
-
-function getDashRange() {
-    const now = new Date();
-
-    if (dashPeriod.customStart || dashPeriod.customEnd) {
-        const start = dashPeriod.customStart
-            ? parseDate(dashPeriod.customStart + "-01")
-            : new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
-        const end = dashPeriod.customEnd
-            ? new Date(parseDate(dashPeriod.customEnd + "-01").getFullYear(),
-                    parseDate(dashPeriod.customEnd + "-01").getMonth() + 1, 0, 12)
-            : new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
-        return { start, end };
-    }
-
-    if (dashPeriod.yearOnly) {
-        return {
-            start: new Date(now.getFullYear(), 0, 1, 12),
-            end: new Date(now.getFullYear(), 11, 31, 12)
-        };
-    }
-
-    const months = dashPeriod.months || 12;
-    const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1, 12);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
-    return { start, end };
-}
-
-function forEachMonthInRange(start, end, cb) {
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
-    const limit = new Date(end.getFullYear(), end.getMonth(), 1, 12);
-
-    while (cursor <= limit) {
-        cb(new Date(cursor.getFullYear(), cursor.getMonth(), 1, 12));
-        cursor.setMonth(cursor.getMonth() + 1);
-    }
-}
-
-function computeMonthTotals(date) {
-    const key = monthKey(date);
-
-    const actual = transactions.filter(item => item.date.startsWith(key));
-    const scheduled = getOccurrencesForMonth(date);
-
-    const incomeActual = actual
-        .filter(x => x.type === "income")
-        .reduce((s, x) => s + x.amount, 0);
-
-    const incomePlanned = scheduled
-        .filter(x => x.type === "income")
-        .reduce((s, x) => s + x.amount, 0);
-
-    const debitActual = actual
-        .filter(x => x.type === "debit")
-        .reduce((s, x) => s + x.amount, 0);
-
-    const debitPlanned = scheduled
-        .filter(x => x.type === "debit")
-        .reduce((s, x) => s + x.amount, 0);
-
-    const invoice = getInvoiceAmount(date);
-    const opening = getOpeningBalance(date);
-    const closing = opening + (incomeActual + incomePlanned)
-        - (debitActual + debitPlanned + invoice);
-
-    return {
-        key,
-        date,
-        income: incomeActual + incomePlanned,
-        debit: debitActual + debitPlanned,
-        invoice,
-        opening,
-        closing
-    };
-}
-
-function renderDashboard() {
-    const { start, end } = getDashRange();
-
-    let totalIncome = 0;
-    let totalDebit = 0;
-    let totalInvoice = 0;
-
-    forEachMonthInRange(start, end, m => {
-        const t = computeMonthTotals(m);
-        totalIncome += t.income;
-        totalDebit += t.debit;
-        totalInvoice += t.invoice;
-    });
-
-    const balance = totalIncome - totalDebit - totalInvoice;
-
-    const setText = (id, v) => {
-        const el = $(id);
-        if (el) el.textContent = v;
-    };
-
-    setText("dashKpiIncome", money(totalIncome));
-    setText("dashKpiDebit", money(totalDebit));
-    setText("dashKpiInvoice", money(totalInvoice));
-    setText("dashKpiBalance", money(balance));
-
-    const percent = totalIncome > 0
-        ? Math.min(100, Math.round((totalDebit / totalIncome) * 100))
-        : 0;
-
-    setText("dashComparePercent", `${percent}%`);
-
-    const fill = $("dashCompareFill");
-    if (fill) {
-        fill.style.width = `${percent}%`;
-        fill.classList.toggle("warn", percent >= 70 && percent < 100);
-        fill.classList.toggle("danger", percent >= 100);
-    }
-
-    const hint = $("dashCompareHint");
-    if (hint) {
-        if (totalIncome === 0 && totalDebit === 0) {
-            hint.textContent = "Sem lançamentos no período.";
-        } else if (percent < 70) {
-            hint.textContent = `Você está gastando ${percent}% do que entra. Boa margem.`;
-        } else if (percent < 100) {
-            hint.textContent = `Atenção: ${percent}% da sua entrada está indo para saídas no débito.`;
-        } else {
-            hint.textContent = `Alerta: suas saídas no débito superam as entradas.`;
-        }
-    }
-
-    const periodLabel = $("dashPeriodLabel");
-    if (periodLabel) {
-        const fmt = d => d.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
-        periodLabel.textContent = `${fmt(start)} → ${fmt(end)}`;
-    }
-
-    renderProjection();
-}
-
-function renderProjection() {
-    const container = $("projectionList");
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    const today = new Date();
-    const baseDate = new Date(today.getFullYear(), today.getMonth(), 1, 12);
-
-    let accumulated = calculateMonthClosing(
-        new Date(today.getFullYear(), today.getMonth() - 1, 1, 12)
-    );
-
-    for (let i = 0; i < dashProjectionMonths; i++) {
-        const monthDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1, 12);
-        const t = computeMonthTotals(monthDate);
-
-        accumulated = t.closing;
-
-        const row = document.createElement("div");
-        row.className = "dash-projection-row";
-
-        const label = monthDate.toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric"
-        });
-
-        const nameEl = document.createElement("strong");
-        nameEl.textContent = label;
-
-        const valueEl = document.createElement("span");
-        valueEl.className = "dash-projection-value";
-        if (accumulated < 0) valueEl.classList.add("negative");
-        valueEl.textContent = money(accumulated);
-
-        row.append(nameEl, valueEl);
-        container.appendChild(row);
-    }
-}
-
-function updateDashShortcutButtons() {
-    document.querySelectorAll(".dash-shortcut").forEach(btn => {
-        const months = btn.getAttribute("data-months");
-        const range = btn.getAttribute("data-range");
-
-        let active = false;
-
-        if (months && !dashPeriod.customStart && !dashPeriod.customEnd && !dashPeriod.yearOnly) {
-            active = Number(months) === Number(dashPeriod.months);
-        }
-        if (range === "year" && dashPeriod.yearOnly) active = true;
-        if (range === "custom" && (dashPeriod.customStart || dashPeriod.customEnd)) active = true;
-
-        btn.classList.toggle("active", active);
-    });
-}
-
-function applyDashPreset(months) {
-    dashPeriod = { months };
-    const customEl = $("dashCustomRange");
-    if (customEl) customEl.classList.add("hidden");
-    updateDashShortcutButtons();
-    renderDashboard();
-}
-
-function applyDashYear() {
-    dashPeriod = { yearOnly: true };
-    const customEl = $("dashCustomRange");
-    if (customEl) customEl.classList.add("hidden");
-    updateDashShortcutButtons();
-    renderDashboard();
-}
-
-function applyDashCustom() {
-    const customEl = $("dashCustomRange");
-    if (customEl) customEl.classList.remove("hidden");
-
-    const startEl = $("dashStart");
-    const endEl = $("dashEnd");
-
-    const now = new Date();
-    const defaultStart = new Date(now.getFullYear(), now.getMonth() - 11, 1, 12);
-    const defaultEnd = now;
-
-    if (startEl && !startEl.value) {
-        startEl.value = `${defaultStart.getFullYear()}-${String(defaultStart.getMonth() + 1).padStart(2, "0")}`;
-    }
-    if (endEl && !endEl.value) {
-        endEl.value = `${defaultEnd.getFullYear()}-${String(defaultEnd.getMonth() + 1).padStart(2, "0")}`;
-    }
-
-    dashPeriod = {
-        customStart: startEl ? startEl.value : null,
-        customEnd: endEl ? endEl.value : null
-    };
-
-    updateDashShortcutButtons();
-    renderDashboard();
-}
-
-document.querySelectorAll(".dash-shortcut").forEach(btn => {
-    btn.addEventListener("click", () => {
-        const months = btn.getAttribute("data-months");
-        const range = btn.getAttribute("data-range");
-
-        if (months) applyDashPreset(Number(months));
-        else if (range === "year") applyDashYear();
-        else if (range === "custom") applyDashCustom();
-    });
-});
-
-safeOn("dashStart", "change", () => {
-    const startEl = $("dashStart");
-    const endEl = $("dashEnd");
-    dashPeriod.customStart = startEl ? startEl.value : null;
-    dashPeriod.customEnd = endEl ? endEl.value : null;
-    dashPeriod.months = null;
-    dashPeriod.yearOnly = false;
-    updateDashShortcutButtons();
-    renderDashboard();
-});
-
-safeOn("dashEnd", "change", () => {
-    const startEl = $("dashStart");
-    const endEl = $("dashEnd");
-    dashPeriod.customStart = startEl ? startEl.value : null;
-    dashPeriod.customEnd = endEl ? endEl.value : null;
-    dashPeriod.months = null;
-    dashPeriod.yearOnly = false;
-    updateDashShortcutButtons();
-    renderDashboard();
-});
-
-safeOn("toggleProjectionButton", "click", () => {
-    projectionSectionOpen = !projectionSectionOpen;
-    const section = $("projectionSection");
-    if (section) section.classList.toggle("hidden", !projectionSectionOpen);
-    const icon = $("toggleProjectionIcon");
-    if (icon) icon.textContent = projectionSectionOpen ? "▾" : "▸";
-    if (projectionSectionOpen) renderProjection();
-});
-
-safeOn("projectionMonths", "input", () => {
-    const el = $("projectionMonths");
-    if (!el) return;
-    const v = Number(el.value);
-    if (Number.isFinite(v) && v >= 1 && v <= 24) {
-        dashProjectionMonths = v;
-        renderProjection();
-    }
-});
-
-safeOn("dashOpenTransactionsMenu", "click", openTransactionsMenu);
-safeOn("dashOpenRecurringMenu", "click", openRecurringMenu);
-
-const _originalSetActiveTab = setActiveTab;
-setActiveTab = function (view) {
-    _originalSetActiveTab(view);
-    if (view === "dashboard") {
-        updateDashShortcutButtons();
-        renderDashboard();
-    }
-};
-
-// Aplica o preset padrão de 12 meses
-applyDashPreset(12);
 
 // ==========================================
 // INICIALIZAÇÃO
@@ -3448,7 +2689,10 @@ populateDescriptionOptions("transactionDescription", "transactionDescriptionList
 populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 
-updateDashboard();
+bindDashShortcuts();
+
+updatePainel();
+renderDashboard();
 updateCloudButtons();
 setCalendarSectionOpen(false);
 setBackupSectionOpen(false);
