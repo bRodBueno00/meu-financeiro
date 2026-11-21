@@ -1564,6 +1564,8 @@ function closeRecurringListModal() {
 
 function renderRecurringList() {
     const container = $("recurringListContainer");
+    if (!container) return;
+
     container.innerHTML = "";
 
     const activeItems = recurring.filter(item =>
@@ -1928,33 +1930,31 @@ $("recurringForm").addEventListener("submit", event => {
 // NAVEGAÇÃO ENTRE MESES
 // ==========================================
 
-$("prevMonth").addEventListener("click", () => {
+function navigateMonth(offset) {
     selectedDate = new Date(
         selectedDate.getFullYear(),
-        selectedDate.getMonth() - 1,
+        selectedDate.getMonth() + offset,
         1,
         12
     );
+
     updateDashboard();
 
     if (!$("recurringListModal").classList.contains("hidden")) {
         renderRecurringList();
     }
-});
 
-$("nextMonth").addEventListener("click", () => {
-    selectedDate = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth() + 1,
-        1,
-        12
-    );
-    updateDashboard();
-
-    if (!$("recurringListModal").classList.contains("hidden")) {
-        renderRecurringList();
+    if (!$("recurringMenu").classList.contains("hidden")) {
+        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric"
+        });
+        $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
     }
-});
+}
+
+$("prevMonth").addEventListener("click", () => navigateMonth(-1));
+$("nextMonth").addEventListener("click", () => navigateMonth(1));
 
 $("goToCurrentMonth").addEventListener("click", () => {
     const now = new Date();
@@ -1963,6 +1963,14 @@ $("goToCurrentMonth").addEventListener("click", () => {
 
     if (!$("recurringListModal").classList.contains("hidden")) {
         renderRecurringList();
+    }
+
+    if (!$("recurringMenu").classList.contains("hidden")) {
+        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric"
+        });
+        $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
     }
 });
 
