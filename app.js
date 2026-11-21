@@ -771,11 +771,19 @@ function getInvoiceMonth(transaction) {
 function getInvoiceAmount(date = selectedDate) {
     const key = monthKey(date);
 
-    return transactions
+    const manualCredit = transactions
         .filter(item =>
             item.type === "credit" && getInvoiceMonth(item) === key
         )
         .reduce((sum, item) => sum + item.amount, 0);
+
+    const recurringCredit = getOccurrencesForMonth(date)
+        .filter(item =>
+            item.type === "credit" && getInvoiceMonth(item) === key
+        )
+        .reduce((sum, item) => sum + item.amount, 0);
+
+    return manualCredit + recurringCredit;
 }
 
 function getInvoiceDueDate(date = selectedDate) {
@@ -806,7 +814,7 @@ function getDayValues(date, actual, scheduled) {
         .filter(x => x.type === "income")
         .reduce((sum, x) => sum + x.amount, 0);
 
-    const credit = dayActual
+    const credit = all
         .filter(x => x.type === "credit")
         .reduce((sum, x) => sum + x.amount, 0);
 
@@ -1113,7 +1121,7 @@ function openDayTransactionsModal(date, type) {
     if (type === "income") {
         items = values.all.filter(x => x.type === "income");
     } else if (type === "credit") {
-        items = actual.filter(x => x.type === "credit" && x.date === date);
+        items = values.all.filter(x => x.type === "credit");
     } else if (type === "debit") {
         items = values.all.filter(x => x.type === "debit");
     }
