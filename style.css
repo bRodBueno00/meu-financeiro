@@ -144,6 +144,10 @@ main {
     gap: 10px;
 }
 
+.action-row .primary-button {
+    width: 100%;
+}
+
 .section {
     background: white;
     border-radius: 14px;
@@ -532,6 +536,10 @@ footer {
 @media(max-width: 370px) {
     main {
         padding: 10px;
+    }
+
+    .action-row {
+        grid-template-columns: 1fr;
     }
 }
 
