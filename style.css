@@ -670,23 +670,6 @@ footer {
 .recurring-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 12px;
-}
-
-.tab-button {
-    padding: 11px;
-    border: 1px solid #cbd5e1;
-    border-radius: 9px;
-    background: #f8fafc;
-    color: #334155;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.tab-button.active {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: white;
 }
