@@ -501,7 +501,13 @@ select:focus {
     color: #94a3b8;
 }
 
-.backup-section .primary-button {
+.backup-box {
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.backup-box .primary-button {
     margin-bottom: 10px;
 }
 
