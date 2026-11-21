@@ -866,10 +866,117 @@ footer {
     color: var(--text-muted);
 }
 
+.category-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    margin-bottom: 12px;
+}
+
+.category-row select {
+    flex: 1;
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+.icon-button {
+    flex-shrink: 0;
+    width: 46px;
+    height: 46px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 10px;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease;
+}
+
+.icon-button:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.icon-button:active {
+    transform: scale(.94);
+}
+
+.icon-button[data-new-category] {
+    font-size: 22px;
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.icon-button[data-new-category]:hover {
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+
+.icon-button[data-manage-category] {
+    font-size: 16px;
+}
+
 .category-dot {
     display: inline-block;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     flex-shrink: 0;
+    box-shadow: 0 0 0 2px var(--surface);
+    border: 1px solid rgba(0, 0, 0, .08);
+}
+
+html[data-theme="dark"] .category-dot {
+    border-color: rgba(255, 255, 255, .15);
+}
+
+#categoriesListContainer .planning-item {
+    padding: 12px 0;
+}
+
+#categoriesListContainer .item-info strong {
+    font-size: 14px;
+}
+
+#categoriesListContainer .item-actions {
+    gap: 6px;
+}
+
+#categoriesListContainer .outline-button {
+    font-size: 12px;
+    padding: 0 12px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#categoriesListContainer .delete-button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 370px) {
+    .category-row {
+        flex-wrap: wrap;
+    }
+
+    .category-row select {
+        flex-basis: 100%;
+    }
+
+    .icon-button {
+        flex: 1;
+    }
 }
