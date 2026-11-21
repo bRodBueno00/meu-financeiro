@@ -186,10 +186,100 @@
     </div>
 
     <div id="dashboardView" class="hidden">
+
+        <div class="dash-sticky">
+            <div class="dash-period-row">
+                <span class="dash-period-label">Período</span>
+                <div class="dash-period-shortcuts">
+                    <button class="dash-shortcut" data-months="3" type="button">3m</button>
+                    <button class="dash-shortcut" data-months="6" type="button">6m</button>
+                    <button class="dash-shortcut active" data-months="12" type="button">12m</button>
+                    <button class="dash-shortcut" data-range="year" type="button">Este ano</button>
+                    <button class="dash-shortcut" data-range="custom" type="button">Personalizado</button>
+                </div>
+            </div>
+
+            <div id="dashCustomRange" class="dash-custom-range hidden">
+                <div>
+                    <label for="dashStart">De</label>
+                    <input id="dashStart" type="month">
+                </div>
+                <div>
+                    <label for="dashEnd">Até</label>
+                    <input id="dashEnd" type="month">
+                </div>
+            </div>
+
+            <p id="dashPeriodLabel" class="dash-period-text"></p>
+        </div>
+
         <section class="section">
-            <h3>Dashboard</h3>
-            <p class="helper">Em breve: gráficos, comparativos e saldo projetado.</p>
+            <h3>Resumo do período</h3>
+
+            <div class="dash-kpi-grid">
+                <div class="dash-kpi dash-kpi-income">
+                    <small>Entradas</small>
+                    <strong id="dashKpiIncome">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-debit">
+                    <small>Saídas no débito</small>
+                    <strong id="dashKpiDebit">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-invoice">
+                    <small>Fatura do cartão</small>
+                    <strong id="dashKpiInvoice">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-balance">
+                    <small>Saldo do período</small>
+                    <strong id="dashKpiBalance">R$ 0,00</strong>
+                </div>
+            </div>
+
+            <div class="dash-compare">
+                <div class="dash-compare-header">
+                    <span>Débito × Entrada</span>
+                    <strong id="dashComparePercent">0%</strong>
+                </div>
+                <div class="dash-compare-track">
+                    <div id="dashCompareFill" class="dash-compare-fill"></div>
+                </div>
+                <p id="dashCompareHint" class="helper"></p>
+            </div>
         </section>
+
+        <section class="section">
+            <button id="toggleProjectionButton" class="expand-button" type="button">
+                <span>Saldo projetado futuro</span>
+                <span id="toggleProjectionIcon">▸</span>
+            </button>
+
+            <div id="projectionSection" class="hidden">
+                <div class="dash-projection-controls">
+                    <div>
+                        <label for="projectionMonths">Meses à frente</label>
+                        <input id="projectionMonths" type="number" min="1" max="24" value="6">
+                    </div>
+                </div>
+
+                <div id="projectionList" class="dash-projection-list"></div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h3>Ações rápidas</h3>
+            <div class="action-row">
+                <button id="dashOpenTransactionsMenu" class="primary-button" type="button">
+                    Novo lançamento
+                </button>
+                <button id="dashOpenRecurringMenu" class="primary-button" type="button">
+                    Recorrentes
+                </button>
+            </div>
+            <p class="helper" style="margin-top:10px">
+                O mês do lançamento é definido pela data informada no formulário.
+            </p>
+        </section>
+
     </div>
 
     <div id="transactionsMenu" class="modal-overlay hidden" role="dialog" aria-modal="true">
