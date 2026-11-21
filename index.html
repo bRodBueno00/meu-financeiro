@@ -248,6 +248,92 @@
         </section>
 
         <section class="section">
+            <button id="toggleFiltersButton" class="expand-button" type="button">
+                <span>Filtros dos gráficos</span>
+                <span id="toggleFiltersIcon">▸</span>
+            </button>
+
+            <div id="filtersSection" class="hidden">
+                <div class="filter-group" style="margin-top:14px">
+                    <label class="filter-label">Tipos de saída</label>
+                    <div class="filter-chips">
+                        <button class="filter-chip active" data-filter-type="debit" type="button">Débito</button>
+                        <button class="filter-chip active" data-filter-type="invoice" type="button">Fatura</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Origem</label>
+                    <div class="filter-chips">
+                        <button class="filter-chip active" data-filter-origin="oneTime" type="button">Pontuais</button>
+                        <button class="filter-chip active" data-filter-origin="recurring" type="button">Recorrentes</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Faixa de valor</label>
+                    <div class="filter-range-row">
+                        <div>
+                            <label for="filterMinValue">Mín (R$)</label>
+                            <input id="filterMinValue" type="number" min="0" step="0.01" placeholder="0">
+                        </div>
+                        <div>
+                            <label for="filterMaxValue">Máx (R$)</label>
+                            <input id="filterMaxValue" type="number" min="0" step="0.01" placeholder="∞">
+                        </div>
+                    </div>
+                </div>
+
+                <button id="clearFiltersButton" class="cancel-button" type="button" style="margin-top:12px">
+                    Limpar filtros
+                </button>
+            </div>
+        </section>
+
+        <section class="section">
+            <h3>Entradas × Saídas (mensal)</h3>
+            <div class="chart-wrapper">
+                <canvas id="chartBars" class="chart-canvas"></canvas>
+            </div>
+            <div class="chart-legend">
+                <span><i class="dot green-dot"></i> Entradas</span>
+                <span><i class="dot red-dot"></i> Saídas</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <h3>Evolução do saldo</h3>
+            <div class="chart-wrapper">
+                <canvas id="chartLine" class="chart-canvas"></canvas>
+            </div>
+            <p class="helper">Saldo ao final de cada mês dentro do período.</p>
+        </section>
+
+        <section class="section">
+            <h3>Top 5 saídas por categoria</h3>
+            <div class="chart-wrapper">
+                <canvas id="chartTopCategories" class="chart-canvas"></canvas>
+            </div>
+            <p class="helper">Clique numa categoria para filtrar as top descrições abaixo.</p>
+        </section>
+
+        <section class="section">
+            <div class="dash-top-row">
+                <div class="dash-top-col">
+                    <h3>Top categorias</h3>
+                    <div id="topCategoriesList" class="dash-top-list"></div>
+                </div>
+                <div class="dash-top-col">
+                    <h3 id="topDescriptionsTitle">Top descrições</h3>
+                    <div id="topDescriptionsList" class="dash-top-list"></div>
+                </div>
+            </div>
+            <button id="clearCategoryFilter" class="cancel-button hidden" type="button" style="margin-top:12px">
+                Limpar filtro de categoria
+            </button>
+        </section>
+
+        <section class="section">
             <button id="toggleProjectionButton" class="expand-button" type="button">
                 <span>Saldo projetado futuro</span>
                 <span id="toggleProjectionIcon">▸</span>
