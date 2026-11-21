@@ -116,43 +116,10 @@ main {
     opacity: .8;
 }
 
-.summary {
+.action-buttons {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 9px;
+    gap: 10px;
     margin-bottom: 16px;
-}
-
-.summary-card {
-    background: white;
-    padding: 14px 9px;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    min-width: 0;
-}
-
-.summary-card span {
-    font-size: 11px;
-    color: #64748b;
-}
-
-.summary-card strong {
-    font-size: 13px;
-    overflow-wrap: anywhere;
-}
-
-.green {
-    color: #16a34a;
-}
-
-.red {
-    color: #dc2626;
-}
-
-.blue {
-    color: #2563eb;
 }
 
 .section {
@@ -565,14 +532,6 @@ footer {
 @media(max-width: 370px) {
     main {
         padding: 10px;
-    }
-
-    .summary-card {
-        padding: 11px 6px;
-    }
-
-    .summary-card strong {
-        font-size: 11px;
     }
 
     .delete-day-button {
