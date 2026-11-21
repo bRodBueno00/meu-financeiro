@@ -34,8 +34,8 @@ let editingRecurringId = null;
 let currentRecurringType = "income";
 let currentTransactionsType = "income";
 
-let transactionsSectionOpen = false;
 let calendarSectionOpen = false;
+let backupSectionOpen = false;
 
 const $ = id => document.getElementById(id);
 
@@ -978,7 +978,6 @@ function updateDashboard() {
 
     renderInvoiceSettings();
     renderDailyCalendar(actual, scheduled);
-    renderTransactions(actual);
 }
 
 // ==========================================
@@ -1420,89 +1419,6 @@ $("transactionForm").addEventListener("submit", event => {
     updateDashboard();
     closeTransactionForm();
 });
-
-// ==========================================
-// HISTÓRICO DE LANÇAMENTOS
-// ==========================================
-
-function renderTransactions(items) {
-    const container = $("transactionList");
-    container.innerHTML = "";
-
-    $("transactionCount").textContent = `${items.length} registros`;
-    $("emptyMessage").style.display = items.length ? "none" : "block";
-
-    const labels = {
-        income: "Entrada",
-        credit: "Crédito",
-        debit: "Débito"
-    };
-
-    [...items]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .forEach(item => {
-            const row = document.createElement("div");
-            row.className = "transaction";
-
-            const info = document.createElement("div");
-            info.className = "transaction-info";
-
-            const name = document.createElement("strong");
-            name.textContent = item.description;
-
-            const details = document.createElement("small");
-            let detailText = `${formatDate(item.date)} • ${labels[item.type]}`;
-            if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
-                detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
-            }
-            details.textContent = detailText;
-
-            info.append(name, details);
-
-            const actions = document.createElement("div");
-            actions.className = "item-actions";
-
-            const value = document.createElement("span");
-            value.className = "item-value " +
-                (item.type === "income" ? "green" :
-                 item.type === "credit" ? "blue" : "red");
-
-            value.style.cursor = "pointer";
-            value.style.textDecoration = "underline dashed";
-            value.title = "Clique para editar o valor";
-
-            value.textContent =
-                `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
-
-            value.addEventListener("click", () => {
-                editTransaction(item);
-            });
-
-            const remove = document.createElement("button");
-            remove.className = "delete-button";
-            remove.textContent = "✕";
-            remove.title = "Excluir lançamento";
-
-            remove.addEventListener("click", () => {
-                if (item.installmentGroupId) {
-                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
-                        return;
-                    }
-                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
-                } else {
-                    if (!confirm("Excluir este lançamento?")) return;
-                    transactions = transactions.filter(x => x.id !== item.id);
-                }
-
-                saveData();
-                updateDashboard();
-            });
-
-            actions.append(value, remove);
-            row.append(info, actions);
-            container.appendChild(row);
-        });
-}
 
 // ==========================================
 // MENU DE LANÇAMENTOS DO MÊS
@@ -2289,11 +2205,11 @@ function setCalendarSectionOpen(open) {
     if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
-function setTransactionsSectionOpen(open) {
-    transactionsSectionOpen = open;
-    const section = $("transactionsSection");
+function setBackupSectionOpen(open) {
+    backupSectionOpen = open;
+    const section = $("backupSection");
     if (section) section.classList.toggle("hidden", !open);
-    const icon = $("toggleTransactionsIcon");
+    const icon = $("toggleBackupIcon");
     if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
@@ -2301,8 +2217,8 @@ $("toggleCalendarButton").addEventListener("click", () => {
     setCalendarSectionOpen(!calendarSectionOpen);
 });
 
-$("toggleTransactionsButton").addEventListener("click", () => {
-    setTransactionsSectionOpen(!transactionsSectionOpen);
+$("toggleBackupButton").addEventListener("click", () => {
+    setBackupSectionOpen(!backupSectionOpen);
 });
 
 // ==========================================
@@ -2604,5 +2520,5 @@ populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList")
 updateDashboard();
 updateCloudButtons();
 setCalendarSectionOpen(false);
-setTransactionsSectionOpen(false);
+setBackupSectionOpen(false);
 initGoogleAuth();
