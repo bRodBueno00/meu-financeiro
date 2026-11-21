@@ -43,11 +43,25 @@ let pendingCategoryTarget = null;
 
 let calendarSectionOpen = false;
 let backupSectionOpen = false;
+let filtersSectionOpen = false;
 let currentView = "painel";
 
 let dashPeriod = { months: 12 };
 let dashProjectionMonths = 6;
 let projectionSectionOpen = false;
+
+let chartFilters = {
+    types: { debit: true, invoice: true },
+    origins: { oneTime: true, recurring: true },
+    minValue: null,
+    maxValue: null
+};
+
+let selectedCategoryKey = null;
+
+let chartTooltipEl = null;
+let chartBarsState = null;
+let chartLineState = null;
 
 const $ = id => document.getElementById(id);
 
@@ -132,6 +146,12 @@ function getCategoryName(type, id) {
     if (!id) return "Outros";
     const cat = getCategoryById(type, id);
     return cat ? cat.name : "Outros";
+}
+
+function getCategoryColor(type, id) {
+    if (!id) return "#64748b";
+    const cat = getCategoryById(type, id);
+    return cat ? cat.color : "#64748b";
 }
 
 function normalizeCategoryId(type, id) {
@@ -1131,7 +1151,7 @@ function updatePainel() {
 }
 
 // ==========================================
-// DASHBOARD
+// DASHBOARD — BASE
 // ==========================================
 
 function getDashRange() {
@@ -1187,16 +1207,129 @@ function computeMonthTotals(date) {
     return { key, date, income: incomeActual + incomePlanned, debit: debitActual + debitPlanned, invoice, opening, closing };
 }
 
+// ==========================================
+// FILTROS
+// ==========================================
+
+function transactionPassesFilter(amount) {
+    if (chartFilters.minValue !== null && amount < chartFilters.minValue) return false;
+    if (chartFilters.maxValue !== null && amount > chartFilters.maxValue) return false;
+    return true;
+}
+
+function getFilteredExpenseEntries(range) {
+    const entries = [];
+
+    forEachMonthInRange(range.start, range.end, monthDate => {
+        const key = monthKey(monthDate);
+
+        transactions.forEach(t => {
+            if (t.type !== "debit") return;
+            if (!t.date.startsWith(key)) return;
+            if (!chartFilters.types.debit) return;
+            if (!chartFilters.origins.oneTime) return;
+            if (!transactionPassesFilter(t.amount)) return;
+
+            entries.push({
+                monthKey: key,
+                amount: t.amount,
+                categoryId: normalizeCategoryId("debit", t.categoryId),
+                categoryName: getCategoryName("debit", t.categoryId),
+                categoryColor: getCategoryColor("debit", t.categoryId),
+                description: t.description || "Sem descrição",
+                recurring: false
+            });
+        });
+
+        getOccurrencesForMonth(monthDate).forEach(r => {
+            if (r.type !== "debit") return;
+            if (!chartFilters.types.debit) return;
+            if (!chartFilters.origins.recurring) return;
+            if (!transactionPassesFilter(r.amount)) return;
+
+            entries.push({
+                monthKey: key,
+                amount: r.amount,
+                categoryId: normalizeCategoryId("debit", r.categoryId),
+                categoryName: getCategoryName("debit", r.categoryId),
+                categoryColor: getCategoryColor("debit", r.categoryId),
+                description: r.description || "Sem descrição",
+                recurring: true
+            });
+        });
+
+        const invoice = getInvoiceAmount(monthDate);
+        if (invoice > 0 && chartFilters.types.invoice && chartFilters.origins.oneTime && transactionPassesFilter(invoice)) {
+            entries.push({
+                monthKey: key,
+                amount: invoice,
+                categoryId: "invoice",
+                categoryName: "Fatura do cartão",
+                categoryColor: "#1d4ed8",
+                description: "Fatura do cartão",
+                recurring: false
+            });
+        }
+    });
+
+    return entries;
+}
+
+function aggregateByCategory(entries) {
+    const map = new Map();
+
+    entries.forEach(e => {
+        const key = e.categoryId;
+        if (!map.has(key)) {
+            map.set(key, {
+                key,
+                name: e.categoryName,
+                color: e.categoryColor,
+                value: 0
+            });
+        }
+        map.get(key).value += e.amount;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.value - a.value);
+}
+
+function aggregateByDescription(entries, filterCategoryKey = null) {
+    const map = new Map();
+
+    entries.forEach(e => {
+        if (filterCategoryKey && e.categoryId !== filterCategoryKey) return;
+
+        const key = e.description.trim().toLowerCase();
+        if (!map.has(key)) {
+            map.set(key, {
+                key,
+                name: e.description,
+                color: e.categoryColor,
+                value: 0,
+                categoryKey: e.categoryId
+            });
+        }
+        map.get(key).value += e.amount;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.value - a.value).slice(0, 5);
+}
+
+// ==========================================
+// RENDER DASHBOARD
+// ==========================================
+
 function renderDashboard() {
     try {
-        const { start, end } = getDashRange();
+        const range = getDashRange();
 
         let totalIncome = 0;
         let totalDebit = 0;
         let totalInvoice = 0;
         let lastClosing = null;
 
-        forEachMonthInRange(start, end, m => {
+        forEachMonthInRange(range.start, range.end, m => {
             const t = computeMonthTotals(m);
             totalIncome += t.income;
             totalDebit += t.debit;
@@ -1204,9 +1337,7 @@ function renderDashboard() {
             lastClosing = t.closing;
         });
 
-        if (lastClosing === null) {
-            lastClosing = getOpeningBalance(start);
-        }
+        if (lastClosing === null) lastClosing = getOpeningBalance(range.start);
 
         const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
 
@@ -1242,9 +1373,11 @@ function renderDashboard() {
         const periodLabel = $("dashPeriodLabel");
         if (periodLabel) {
             const fmt = d => d.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
-            periodLabel.textContent = `${fmt(start)} → ${fmt(end)}`;
+            periodLabel.textContent = `${fmt(range.start)} → ${fmt(range.end)}`;
         }
 
+        renderCharts(range);
+        renderTopLists(range);
         renderProjection();
         updateDashShortcutButtons();
     } catch (error) {
@@ -1373,6 +1506,566 @@ function bindDashShortcuts() {
         });
     });
 }
+
+// ==========================================
+// FILTROS — UI
+// ==========================================
+
+function updateFilterChipsUI() {
+    document.querySelectorAll("[data-filter-type]").forEach(btn => {
+        const t = btn.getAttribute("data-filter-type");
+        btn.classList.toggle("active", !!chartFilters.types[t]);
+    });
+    document.querySelectorAll("[data-filter-origin]").forEach(btn => {
+        const o = btn.getAttribute("data-filter-origin");
+        btn.classList.toggle("active", !!chartFilters.origins[o]);
+    });
+}
+
+function bindFilters() {
+    document.querySelectorAll("[data-filter-type]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const t = btn.getAttribute("data-filter-type");
+            const next = !chartFilters.types[t];
+            const others = Object.keys(chartFilters.types).filter(k => k !== t);
+            if (!next && others.every(k => !chartFilters.types[k])) return;
+            chartFilters.types[t] = next;
+            updateFilterChipsUI();
+            renderDashboard();
+        });
+    });
+
+    document.querySelectorAll("[data-filter-origin]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const o = btn.getAttribute("data-filter-origin");
+            const next = !chartFilters.origins[o];
+            const others = Object.keys(chartFilters.origins).filter(k => k !== o);
+            if (!next && others.every(k => !chartFilters.origins[k])) return;
+            chartFilters.origins[o] = next;
+            updateFilterChipsUI();
+            renderDashboard();
+        });
+    });
+
+    safeOn("filterMinValue", "input", () => {
+        const el = $("filterMinValue");
+        if (!el) return;
+        const v = parseFloat(el.value.replace(",", "."));
+        chartFilters.minValue = Number.isFinite(v) && v >= 0 ? v : null;
+        renderDashboard();
+    });
+
+    safeOn("filterMaxValue", "input", () => {
+        const el = $("filterMaxValue");
+        if (!el) return;
+        const v = parseFloat(el.value.replace(",", "."));
+        chartFilters.maxValue = Number.isFinite(v) && v > 0 ? v : null;
+        renderDashboard();
+    });
+
+    safeOn("clearFiltersButton", "click", () => {
+        chartFilters = {
+            types: { debit: true, invoice: true },
+            origins: { oneTime: true, recurring: true },
+            minValue: null,
+            maxValue: null
+        };
+        const minEl = $("filterMinValue");
+        if (minEl) minEl.value = "";
+        const maxEl = $("filterMaxValue");
+        if (maxEl) maxEl.value = "";
+        updateFilterChipsUI();
+        renderDashboard();
+    });
+
+    safeOn("toggleFiltersButton", "click", () => {
+        filtersSectionOpen = !filtersSectionOpen;
+        const section = $("filtersSection");
+        if (section) section.classList.toggle("hidden", !filtersSectionOpen);
+        const icon = $("toggleFiltersIcon");
+        if (icon) icon.textContent = filtersSectionOpen ? "▾" : "▸";
+    });
+}
+
+// ==========================================
+// CHARTS — HELPERS
+// ==========================================
+
+function getChartColors() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    return {
+        text: isDark ? "#cbd5e1" : "#475569",
+        grid: isDark ? "#2a3752" : "#e2e8f0",
+        income: isDark ? "#4ade80" : "#16a34a",
+        debit: isDark ? "#f87171" : "#dc2626",
+        line: isDark ? "#60a5fa" : "#2563eb",
+        lineFill: isDark ? "rgba(96, 165, 250, .18)" : "rgba(37, 99, 235, .12)",
+        bg: isDark ? "#1a2438" : "#f1f5f9"
+    };
+}
+
+function getTooltip() {
+    if (chartTooltipEl && document.body.contains(chartTooltipEl)) return chartTooltipEl;
+    const el = document.createElement("div");
+    el.className = "chart-tooltip";
+    document.body.appendChild(el);
+    chartTooltipEl = el;
+    return el;
+}
+
+function showTooltip(x, y, html) {
+    const tt = getTooltip();
+    tt.innerHTML = html;
+    tt.classList.add("visible");
+
+    const rect = tt.getBoundingClientRect();
+    let left = x + 12;
+    let top = y - rect.height - 10;
+    if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+    if (top < 8) top = y + 12;
+
+    tt.style.left = `${left}px`;
+    tt.style.top = `${top}px`;
+}
+
+function hideTooltip() {
+    const tt = getTooltip();
+    tt.classList.remove("visible");
+}
+
+function setupCanvas(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const cssWidth = Math.max(200, Math.floor(rect.width));
+    const cssHeight = Math.max(120, Math.floor(rect.height));
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, width: cssWidth, height: cssHeight };
+}
+
+// ==========================================
+// CHART — BARRAS (Entradas × Saídas)
+// ==========================================
+
+function drawBarsChart() {
+    const canvas = $("chartBars");
+    if (!canvas) return;
+    const { ctx, width, height } = setupCanvas(canvas);
+    const colors = getChartColors();
+
+    ctx.clearRect(0, 0, width, height);
+
+    const { start, end } = getDashRange();
+    const months = [];
+    forEachMonthInRange(start, end, m => {
+        const t = computeMonthTotals(m);
+        months.push({
+            label: m.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+            monthDate: m,
+            income: t.income,
+            debit: t.debit + t.invoice
+        });
+    });
+
+    if (months.length === 0) {
+        ctx.fillStyle = colors.text;
+        ctx.font = "13px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Sem dados no período", width / 2, height / 2);
+        chartBarsState = null;
+        return;
+    }
+
+    const padL = 12;
+    const padR = 12;
+    const padT = 16;
+    const padB = 36;
+    const chartW = width - padL - padR;
+    const chartH = height - padT - padB;
+
+    const maxVal = Math.max(...months.map(m => Math.max(m.income, m.debit)), 1);
+    const yScale = chartH / maxVal;
+
+    // Grid
+    ctx.strokeStyle = colors.grid;
+    ctx.lineWidth = 1;
+    const gridLines = 3;
+    for (let i = 0; i <= gridLines; i++) {
+        const y = padT + (chartH / gridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(width - padR, y);
+        ctx.stroke();
+    }
+
+    const slotW = chartW / months.length;
+    const gap = Math.max(2, slotW * 0.12);
+    const barW = Math.max(4, (slotW - gap * 2) / 2 - 2);
+
+    const bars = [];
+
+    months.forEach((m, i) => {
+        const slotX = padL + i * slotW;
+        const baseY = padT + chartH;
+        const cx = slotX + slotW / 2;
+
+        const incH = m.income * yScale;
+        const debH = m.debit * yScale;
+
+        const incX = cx - barW - 1;
+        const debX = cx + 1;
+
+        if (incH > 0) {
+            ctx.fillStyle = colors.income;
+            ctx.fillRect(incX, baseY - incH, barW, incH);
+            bars.push({ kind: "income", x: incX, y: baseY - incH, w: barW, h: incH, month: m });
+        }
+        if (debH > 0) {
+            ctx.fillStyle = colors.debit;
+            ctx.fillRect(debX, baseY - debH, barW, debH);
+            bars.push({ kind: "debit", x: debX, y: baseY - debH, w: barW, h: debH, month: m });
+        }
+
+        // X label
+        const showEvery = months.length > 8 ? 2 : 1;
+        if (i % showEvery === 0 || i === months.length - 1) {
+            ctx.fillStyle = colors.text;
+            ctx.font = "10px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillText(m.label, cx, baseY + 8);
+        }
+    });
+
+    chartBarsState = { bars, canvas, width, height };
+}
+
+function bindBarsChart() {
+    const canvas = $("chartBars");
+    if (!canvas || canvas.dataset.bound === "1") return;
+    canvas.dataset.bound = "1";
+
+    function findBar(evt) {
+        if (!chartBarsState) return null;
+        const rect = canvas.getBoundingClientRect();
+        const x = evt.clientX - rect.left;
+        const y = evt.clientY - rect.top;
+        for (const b of chartBarsState.bars) {
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+        }
+        return null;
+    }
+
+    canvas.addEventListener("mousemove", e => {
+        const bar = findBar(e);
+        if (bar) {
+            const monthName = bar.month.monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+            const type = bar.kind === "income" ? "Entradas" : "Saídas";
+            const val = bar.kind === "income" ? bar.month.income : bar.month.debit;
+            showTooltip(e.clientX, e.clientY, `${type}: ${money(val)}<small>${monthName}</small>`);
+        } else hideTooltip();
+    });
+
+    canvas.addEventListener("mouseleave", hideTooltip);
+
+    canvas.addEventListener("click", e => {
+        const bar = findBar(e);
+        if (!bar) return;
+        const monthName = bar.month.monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const type = bar.kind === "income" ? "Entradas" : "Saídas";
+        const val = bar.kind === "income" ? bar.month.income : bar.month.debit;
+        showTooltip(e.clientX, e.clientY, `${type}: ${money(val)}<small>${monthName}</small>`);
+        setTimeout(hideTooltip, 2200);
+    });
+}
+
+// ==========================================
+// CHART — LINHA (Saldo)
+// ==========================================
+
+function drawLineChart() {
+    const canvas = $("chartLine");
+    if (!canvas) return;
+    const { ctx, width, height } = setupCanvas(canvas);
+    const colors = getChartColors();
+
+    ctx.clearRect(0, 0, width, height);
+
+    const { start, end } = getDashRange();
+    const months = [];
+    forEachMonthInRange(start, end, m => {
+        const t = computeMonthTotals(m);
+        months.push({
+            label: m.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+            monthDate: m,
+            closing: t.closing
+        });
+    });
+
+    if (months.length === 0) {
+        ctx.fillStyle = colors.text;
+        ctx.font = "13px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Sem dados no período", width / 2, height / 2);
+        chartLineState = null;
+        return;
+    }
+
+    const padL = 12;
+    const padR = 12;
+    const padT = 16;
+    const padB = 36;
+    const chartW = width - padL - padR;
+    const chartH = height - padT - padB;
+
+    const values = months.map(m => m.closing);
+    const minV = Math.min(...values, 0);
+    const maxV = Math.max(...values, 0);
+    const span = Math.max(1, maxV - minV);
+
+    const xStep = months.length > 1 ? chartW / (months.length - 1) : 0;
+
+    function yFor(v) {
+        return padT + chartH - ((v - minV) / span) * chartH;
+    }
+
+    // Zero line if crosses
+    if (minV < 0 && maxV > 0) {
+        const y0 = yFor(0);
+        ctx.strokeStyle = colors.grid;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padL, y0);
+        ctx.lineTo(width - padR, y0);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Grid
+    ctx.strokeStyle = colors.grid;
+    for (let i = 0; i <= 3; i++) {
+        const y = padT + (chartH / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(width - padR, y);
+        ctx.stroke();
+    }
+
+    const points = months.map((m, i) => ({
+        x: padL + xStep * i,
+        y: yFor(m.closing),
+        month: m
+    }));
+
+    // Area
+    if (points.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, padT + chartH);
+        points.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(points[points.length - 1].x, padT + chartH);
+        ctx.closePath();
+        ctx.fillStyle = colors.lineFill;
+        ctx.fill();
+    }
+
+    // Line
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    // Points
+    points.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = colors.line;
+        ctx.fill();
+        ctx.strokeStyle = colors.bg;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    });
+
+    // X labels
+    const showEvery = months.length > 8 ? 2 : 1;
+    months.forEach((m, i) => {
+        if (i % showEvery !== 0 && i !== months.length - 1) return;
+        const x = padL + xStep * i;
+        ctx.fillStyle = colors.text;
+        ctx.font = "10px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(m.label, x, padT + chartH + 8);
+    });
+
+    chartLineState = { points, canvas };
+}
+
+function bindLineChart() {
+    const canvas = $("chartLine");
+    if (!canvas || canvas.dataset.bound === "1") return;
+    canvas.dataset.bound = "1";
+
+    function findPoint(evt) {
+        if (!chartLineState) return null;
+        const rect = canvas.getBoundingClientRect();
+        const x = evt.clientX - rect.left;
+        const y = evt.clientY - rect.top;
+        for (const p of chartLineState.points) {
+            const dx = x - p.x;
+            const dy = y - p.y;
+            if (dx * dx + dy * dy < 20 * 20) return p;
+        }
+        return null;
+    }
+
+    canvas.addEventListener("mousemove", e => {
+        const p = findPoint(e);
+        if (p) {
+            const monthName = p.month.monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+            showTooltip(e.clientX, e.clientY, `Saldo: ${money(p.month.closing)}<small>${monthName}</small>`);
+        } else hideTooltip();
+    });
+
+    canvas.addEventListener("mouseleave", hideTooltip);
+
+    canvas.addEventListener("click", e => {
+        const p = findPoint(e);
+        if (!p) return;
+        const monthName = p.month.monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        showTooltip(e.clientX, e.clientY, `Saldo: ${money(p.month.closing)}<small>${monthName}</small>`);
+        setTimeout(hideTooltip, 2200);
+    });
+}
+
+// ==========================================
+// RENDER CHARTS
+// ==========================================
+
+function renderCharts() {
+    drawBarsChart();
+    drawLineChart();
+    bindBarsChart();
+    bindLineChart();
+}
+
+// ==========================================
+// TOP CATEGORIAS / DESCRIÇÕES
+// ==========================================
+
+function renderTopLists(range) {
+    const entries = getFilteredExpenseEntries(range);
+    const byCat = aggregateByCategory(entries).slice(0, 5);
+    const byDesc = aggregateByDescription(entries, selectedCategoryKey);
+
+    const catContainer = $("topCategoriesList");
+    const descContainer = $("topDescriptionsList");
+    const descTitle = $("topDescriptionsTitle");
+    const clearBtn = $("clearCategoryFilter");
+
+    if (catContainer) {
+        catContainer.innerHTML = "";
+
+        if (byCat.length === 0) {
+            const p = document.createElement("p");
+            p.className = "dash-top-empty";
+            p.textContent = "Sem saídas no período.";
+            catContainer.appendChild(p);
+        } else {
+            byCat.forEach(c => {
+                const item = document.createElement("div");
+                item.className = "dash-top-item";
+                if (selectedCategoryKey === c.key) item.classList.add("selected");
+
+                const dot = document.createElement("span");
+                dot.className = "dash-top-item-dot";
+                dot.style.background = c.color;
+
+                const name = document.createElement("span");
+                name.className = "dash-top-item-name";
+                name.textContent = c.name;
+
+                const value = document.createElement("span");
+                value.className = "dash-top-item-value";
+                value.textContent = money(c.value);
+
+                item.append(dot, name, value);
+
+                item.addEventListener("click", () => {
+                    if (selectedCategoryKey === c.key) {
+                        selectedCategoryKey = null;
+                    } else {
+                        selectedCategoryKey = c.key;
+                    }
+                    renderTopLists(getDashRange());
+                });
+
+                catContainer.appendChild(item);
+            });
+        }
+    }
+
+    if (descContainer) {
+        descContainer.innerHTML = "";
+
+        if (byDesc.length === 0) {
+            const p = document.createElement("p");
+            p.className = "dash-top-empty";
+            p.textContent = selectedCategoryKey
+                ? "Sem descrições nessa categoria."
+                : "Sem descrições no período.";
+            descContainer.appendChild(p);
+        } else {
+            byDesc.forEach(d => {
+                const item = document.createElement("div");
+                item.className = "dash-top-item";
+                item.style.cursor = "default";
+
+                const dot = document.createElement("span");
+                dot.className = "dash-top-item-dot";
+                dot.style.background = d.color;
+
+                const name = document.createElement("span");
+                name.className = "dash-top-item-name";
+                name.textContent = d.name;
+
+                const value = document.createElement("span");
+                value.className = "dash-top-item-value";
+                value.textContent = money(d.value);
+
+                item.append(dot, name, value);
+                descContainer.appendChild(item);
+            });
+        }
+    }
+
+    if (descTitle) {
+        const catName = selectedCategoryKey
+            ? (byCat.find(c => c.key === selectedCategoryKey)?.name
+                || aggregateByCategory(entries).find(c => c.key === selectedCategoryKey)?.name)
+            : null;
+
+        descTitle.textContent = catName
+            ? `Top descrições — ${catName}`
+            : "Top descrições";
+        descTitle.classList.toggle("filtered", !!selectedCategoryKey);
+    }
+
+    if (clearBtn) {
+        clearBtn.classList.toggle("hidden", !selectedCategoryKey);
+    }
+}
+
+safeOn("clearCategoryFilter", "click", () => {
+    selectedCategoryKey = null;
+    renderTopLists(getDashRange());
+});
 
 // ==========================================
 // ABAS
@@ -1997,7 +2690,7 @@ safeOn("standaloneTransactionForm", "submit", event => {
 });
 
 // ==========================================
-// RECORRENTES (menu)
+// RECORRENTES
 // ==========================================
 
 function openRecurringMenu() {
@@ -2362,7 +3055,7 @@ let touchStartX = 0, touchStartY = 0, touchTracking = false;
 function isInteractiveTarget(target) {
     if (!target) return false;
     return !!target.closest(
-        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row, .dash-sticky"
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row, .dash-sticky, canvas, .chart-wrapper, .dash-top-item"
     );
 }
 
@@ -2668,14 +3361,31 @@ safeOn("syncNowButton", "click", async () => {
         const next = current === "dark" ? "light" : "dark";
         applyTheme(next);
         localStorage.setItem(THEME_KEY, next);
+        if (currentView === "dashboard") renderDashboard();
     });
 
     if (window.matchMedia) {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
-            if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? "dark" : "light");
+            if (!localStorage.getItem(THEME_KEY)) {
+                applyTheme(e.matches ? "dark" : "light");
+                if (currentView === "dashboard") renderDashboard();
+            }
         });
     }
 })();
+
+// ==========================================
+// REDRAW EM RESIZE
+// ==========================================
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+    if (currentView !== "dashboard") return;
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        if (currentView === "dashboard") renderDashboard();
+    }, 150);
+});
 
 // ==========================================
 // INICIALIZAÇÃO
@@ -2695,6 +3405,8 @@ populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 
 bindDashShortcuts();
+bindFilters();
+updateFilterChipsUI();
 
 updatePainel();
 renderDashboard();
