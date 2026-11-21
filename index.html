@@ -38,10 +38,6 @@
 
 <main>
 
-    <button id="openRecurringMenu" class="primary-button" type="button" style="margin-bottom:16px">
-        Gerenciar lançamentos recorrentes
-    </button>
-
     <section class="balance-card">
         <span>Saldo projetado do mês</span>
         <h2 id="balance">R$ 0,00</h2>
@@ -62,24 +58,19 @@
         </div>
     </section>
 
-    <section class="summary">
-        <div class="summary-card">
-            <span>Entradas</span>
-            <strong class="green" id="received">R$ 0,00</strong>
-        </div>
+    <div class="action-buttons">
+        <button id="openRecurringMenu" class="primary-button" type="button">
+            Lançamentos recorrentes
+        </button>
+        <button id="openBalanceConfig" class="primary-button" type="button">
+            Configuração do saldo
+        </button>
+        <button id="openInvoiceConfig" class="primary-button" type="button">
+            Configuração da fatura
+        </button>
+    </div>
 
-        <div class="summary-card">
-            <span>Crédito utilizado</span>
-            <strong class="blue" id="creditTotal">R$ 0,00</strong>
-        </div>
-
-        <div class="summary-card">
-            <span>Débito utilizado</span>
-            <strong class="red" id="debitTotal">R$ 0,00</strong>
-        </div>
-    </section>
-
-    <section class="section">
+    <section id="sectionBalanceConfig" class="section hidden">
         <h3>Configuração do saldo</h3>
 
         <label for="initialBalance">Saldo inicial do mês (R$)</label>
@@ -94,7 +85,7 @@
         </button>
     </section>
 
-    <section class="section">
+    <section id="sectionInvoiceConfig" class="section hidden">
         <h3>Fatura do cartão</h3>
 
         <div class="invoice-highlight">
@@ -130,7 +121,7 @@
 
     <section class="section">
         <div class="section-title">
-            <h3>Calendário financeiro</h3>
+            <h3>Calendário</h3>
             <span>Toque nos valores para lançar</span>
         </div>
 
