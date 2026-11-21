@@ -39,8 +39,16 @@
 <main>
 
     <section class="balance-card">
-        <span>Saldo projetado do mês</span>
-        <h2 id="balance">R$ 0,00</h2>
+        <div class="balance-main">
+            <div>
+                <span>Saldo projetado do mês</span>
+                <h2 id="balance">R$ 0,00</h2>
+            </div>
+            <div>
+                <span>Saldo de hoje</span>
+                <h2 id="todayBalance">R$ 0,00</h2>
+            </div>
+        </div>
 
         <div class="balance-details">
             <div>
@@ -48,12 +56,12 @@
                 <strong id="totalIncome">R$ 0,00</strong>
             </div>
             <div>
-                <small>Saídas no débito</small>
-                <strong id="totalExpenses">R$ 0,00</strong>
+                <small>Fatura</small>
+                <strong id="totalInvoice">R$ 0,00</strong>
             </div>
             <div>
-                <small>Saldo de hoje</small>
-                <strong id="todayBalance">R$ 0,00</strong>
+                <small>Saídas no débito</small>
+                <strong id="totalExpenses">R$ 0,00</strong>
             </div>
         </div>
     </section>
@@ -62,11 +70,11 @@
         <button id="openRecurringMenu" class="primary-button" type="button">
             Lançamentos recorrentes
         </button>
-        <button id="openBalanceConfig" class="primary-button" type="button">
-            Configuração do saldo
-        </button>
         <button id="openInvoiceConfig" class="primary-button" type="button">
-            Configuração da fatura
+            Configurar fatura
+        </button>
+        <button id="openBalanceConfig" class="primary-button" type="button">
+            Configurar saldo inicial
         </button>
     </div>
 
@@ -78,7 +86,6 @@
 
         <div id="calendarSection" class="hidden">
             <div class="section-title" style="margin-top:14px">
-                <h3>Calendário</h3>
                 <span>Toque nos valores para lançar</span>
             </div>
 
@@ -114,7 +121,6 @@
 
         <div id="transactionsSection" class="hidden">
             <div class="section-title" style="margin-top:14px">
-                <h3>Lançamentos do mês</h3>
                 <span id="transactionCount">0 registros</span>
             </div>
 
@@ -146,7 +152,7 @@
     </section>
 
     <section class="section reset-section">
-        <h3>Zerar aplicativo</h3>
+        <h3>Restaurar aplicativo</h3>
         <p class="helper">
             Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste aparelho.
         </p>
