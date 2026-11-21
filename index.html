@@ -153,19 +153,26 @@
             <p class="helper" id="recurringMonthLabel"></p>
 
             <div class="recurring-tabs">
-                <button id="showIncomeButton" class="primary-button" type="button">Exibir entradas</button>
-                <button id="showExpenseButton" class="primary-button" type="button">Exibir saídas</button>
+                <button id="openIncomeRecurring" class="primary-button" type="button">Entradas</button>
+                <button id="openCreditRecurring" class="primary-button" type="button">Saídas Crédito</button>
+                <button id="openDebitRecurring" class="primary-button" type="button">Saídas Débito</button>
             </div>
 
-            <div id="recurringIncomeSection" class="hidden">
-                <h4 style="margin-top:12px;font-size:13px">Entradas recorrentes</h4>
-                <div id="recurringIncomeList"></div>
+            <div class="modal-actions">
+                <button id="closeRecurringMenu" class="cancel-button" type="button">
+                    Fechar
+                </button>
             </div>
+        </div>
+    </div>
 
-            <div id="recurringExpenseSection" class="hidden">
-                <h4 style="margin-top:12px;font-size:13px">Saídas recorrentes</h4>
-                <div id="recurringExpenseList"></div>
-            </div>
+    <div id="recurringListModal" class="modal-overlay hidden"
+         role="dialog" aria-modal="true" aria-labelledby="recurringListTitle">
+        <div class="modal-card" style="max-width:560px">
+            <h3 id="recurringListTitle">Lançamentos</h3>
+            <p class="helper" id="recurringListMonthLabel"></p>
+
+            <div id="recurringListContainer"></div>
 
             <div id="recurringFormContainer" class="hidden">
                 <form id="recurringForm" style="margin-top:16px">
@@ -175,13 +182,6 @@
 
                     <label for="recurringAmount">Valor (R$)</label>
                     <input id="recurringAmount" type="number" min="0.01" step="0.01" required>
-
-                    <label for="recurringType">Tipo</label>
-                    <select id="recurringType">
-                        <option value="income">Entrada</option>
-                        <option value="debit">Saída no débito</option>
-                        <option value="credit">Saída no crédito</option>
-                    </select>
 
                     <label for="recurringFrequency">Frequência</label>
                     <select id="recurringFrequency">
@@ -207,7 +207,7 @@
                 <button id="openRecurringForm" class="primary-button" type="button">
                     + Novo
                 </button>
-                <button id="closeRecurringMenu" class="cancel-button" type="button">
+                <button id="closeRecurringListModal" class="cancel-button" type="button">
                     Fechar
                 </button>
             </div>
