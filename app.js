@@ -31,7 +31,7 @@ let pendingTransactionDate = null;
 
 let editingRecurringId = null;
 
-let currentRecurringType = "income"; // "income" | "credit" | "debit"
+let currentRecurringType = "income";
 
 const $ = id => document.getElementById(id);
 
@@ -280,7 +280,6 @@ function initGoogleAuth() {
         }
     });
 
-    // Solicita login automaticamente ao abrir o app
     tokenClient.requestAccessToken({ prompt: "" });
 }
 
@@ -410,10 +409,15 @@ async function loadFromDrive() {
         }));
 
         setCloudStatus("Drive: dados carregados");
-        updateDashboard();
     } catch (error) {
         setCloudStatus("Drive: erro ao carregar");
         console.error(error);
+    } finally {
+        try {
+            updateDashboard();
+        } catch (e) {
+            console.error("Erro ao atualizar painel após carregar Drive:", e);
+        }
     }
 }
 
@@ -698,15 +702,21 @@ function recurringIsActiveInMonth(item, date) {
 function getOccurrencesForMonth(date) {
     const occurrences = [];
 
+    if (!Array.isArray(recurring)) return occurrences;
+
     recurring.forEach(item => {
-        const result = recurringIsActiveInMonth(item, date);
-        if (result) {
-            occurrences.push({
-                ...item,
-                amount: result.amount,
-                occurrenceDate: result.occurrence,
-                hasOverride: result.hasOverride
-            });
+        try {
+            const result = recurringIsActiveInMonth(item, date);
+            if (result) {
+                occurrences.push({
+                    ...item,
+                    amount: result.amount,
+                    occurrenceDate: result.occurrence,
+                    hasOverride: result.hasOverride
+                });
+            }
+        } catch (e) {
+            console.error("Erro ao processar recorrente:", item, e);
         }
     });
 
@@ -769,21 +779,26 @@ function getInvoiceMonth(transaction) {
 }
 
 function getInvoiceAmount(date = selectedDate) {
-    const key = monthKey(date);
+    try {
+        const key = monthKey(date);
 
-    const manualCredit = transactions
-        .filter(item =>
-            item.type === "credit" && getInvoiceMonth(item) === key
-        )
-        .reduce((sum, item) => sum + item.amount, 0);
+        const manualCredit = transactions
+            .filter(item =>
+                item.type === "credit" && getInvoiceMonth(item) === key
+            )
+            .reduce((sum, item) => sum + item.amount, 0);
 
-    const recurringCredit = getOccurrencesForMonth(date)
-        .filter(item =>
-            item.type === "credit" && getInvoiceMonth(item) === key
-        )
-        .reduce((sum, item) => sum + item.amount, 0);
+        const recurringCredit = getOccurrencesForMonth(date)
+            .filter(item =>
+                item.type === "credit" && getInvoiceMonth(item) === key
+            )
+            .reduce((sum, item) => sum + item.amount, 0);
 
-    return manualCredit + recurringCredit;
+        return manualCredit + recurringCredit;
+    } catch (e) {
+        console.error("Erro em getInvoiceAmount:", e);
+        return 0;
+    }
 }
 
 function getInvoiceDueDate(date = selectedDate) {
@@ -1938,13 +1953,26 @@ function navigateMonth(offset) {
         12
     );
 
-    updateDashboard();
-
-    if (!$("recurringListModal").classList.contains("hidden")) {
-        renderRecurringList();
+    try {
+        updateDashboard();
+    } catch (e) {
+        console.error("Erro ao atualizar painel:", e);
     }
 
-    if (!$("recurringMenu").classList.contains("hidden")) {
+    if ($("recurringListModal") && !$("recurringListModal").classList.contains("hidden")) {
+        try {
+            renderRecurringList();
+            const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+                month: "long",
+                year: "numeric"
+            });
+            $("recurringListMonthLabel").textContent = `Válidos em ${monthLabel}`;
+        } catch (e) {
+            console.error("Erro ao atualizar lista de recorrentes:", e);
+        }
+    }
+
+    if ($("recurringMenu") && !$("recurringMenu").classList.contains("hidden")) {
         const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
             month: "long",
             year: "numeric"
@@ -1959,13 +1987,22 @@ $("nextMonth").addEventListener("click", () => navigateMonth(1));
 $("goToCurrentMonth").addEventListener("click", () => {
     const now = new Date();
     selectedDate = new Date(now.getFullYear(), now.getMonth(), 1, 12);
-    updateDashboard();
 
-    if (!$("recurringListModal").classList.contains("hidden")) {
-        renderRecurringList();
+    try {
+        updateDashboard();
+    } catch (e) {
+        console.error("Erro ao atualizar painel:", e);
     }
 
-    if (!$("recurringMenu").classList.contains("hidden")) {
+    if ($("recurringListModal") && !$("recurringListModal").classList.contains("hidden")) {
+        try {
+            renderRecurringList();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    if ($("recurringMenu") && !$("recurringMenu").classList.contains("hidden")) {
         const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
             month: "long",
             year: "numeric"
