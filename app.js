@@ -39,6 +39,8 @@ let currentTransactionsType = "income";
 let currentCategoriesType = "income";
 let editingCategoryId = null;
 
+let pendingCategoryTarget = null;
+
 let calendarSectionOpen = false;
 let backupSectionOpen = false;
 let currentView = "painel";
@@ -152,15 +154,96 @@ function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
     select.value = normalizeCategoryId(type, selectedId);
 }
 
-function openCategoriesMenu() {
-    $("categoriesMenuModal").classList.remove("hidden");
+// Contexto: cada botão "+" ou "⚙️" sabe qual tipo usar
+function resolveCategoryType(buttonType, targetSelectId) {
+    if (targetSelectId === "transactionCategory") {
+        return $("transactionType").value;
+    }
+    if (targetSelectId === "standaloneCategory") {
+        return currentTransactionsType;
+    }
+    if (targetSelectId === "recurringCategory") {
+        return currentRecurringType;
+    }
+    if (targetSelectId === "recurringEditCategory") {
+        if (editingRecurringId) {
+            const item = recurring.find(x => x.id === editingRecurringId);
+            if (item) return item.type;
+        }
+        return currentRecurringType;
+    }
+    return currentCategoriesType;
 }
 
-function closeCategoriesMenu() {
-    $("categoriesMenuModal").classList.add("hidden");
+function openNewCategoryModal(targetSelectId, buttonType) {
+    pendingCategoryTarget = {
+        selectId: targetSelectId,
+        type: resolveCategoryType(buttonType, targetSelectId)
+    };
+
+    const labels = {
+        income: "Entrada",
+        credit: "Crédito",
+        debit: "Débito"
+    };
+
+    $("newCategoryTypeLabel").textContent =
+        `Tipo: ${labels[pendingCategoryTarget.type]}`;
+
+    $("newCategoryForm").reset();
+    $("newCategoryModal").classList.remove("hidden");
+    $("newCategoryName").focus();
 }
 
-function openCategoriesList(type) {
+function closeNewCategoryModal() {
+    $("newCategoryModal").classList.add("hidden");
+    pendingCategoryTarget = null;
+}
+
+$("closeNewCategoryModal").addEventListener("click", closeNewCategoryModal);
+
+$("newCategoryModal").addEventListener("click", event => {
+    if (event.target === $("newCategoryModal")) closeNewCategoryModal();
+});
+
+$("newCategoryForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    if (!pendingCategoryTarget) return;
+
+    const name = $("newCategoryName").value.trim();
+    if (!name) return;
+
+    const type = pendingCategoryTarget.type;
+    const exists = categories[type].some(
+        c => c.name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (exists) {
+        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+        return;
+    }
+
+    const newCat = {
+        id: makeId(),
+        name,
+        color: nextColor()
+    };
+
+    categories[type].push(newCat);
+
+    saveData();
+
+    populateCategorySelect(pendingCategoryTarget.selectId, type, newCat.id);
+
+    closeNewCategoryModal();
+});
+
+// ==========================================
+// GERENCIAR CATEGORIAS (botão ⚙️)
+// ==========================================
+
+function openCategoriesListForType(type) {
     currentCategoriesType = type;
 
     const labels = {
@@ -172,7 +255,6 @@ function openCategoriesList(type) {
     $("categoriesListTitle").textContent = labels[type];
     $("categoriesListTypeLabel").textContent = "Categorias atuais:";
 
-    $("categoryFormContainer").classList.add("hidden");
     $("categoriesListModal").classList.remove("hidden");
 
     renderCategoriesList();
@@ -180,7 +262,6 @@ function openCategoriesList(type) {
 
 function closeCategoriesListModal() {
     $("categoriesListModal").classList.add("hidden");
-    $("categoryFormContainer").classList.add("hidden");
 }
 
 function renderCategoriesList() {
@@ -242,17 +323,6 @@ function renderCategoriesList() {
     });
 }
 
-function openCategoryForm() {
-    $("categoryFormContainer").classList.remove("hidden");
-    $("categoryForm").reset();
-    $("categoryName").focus();
-}
-
-function closeCategoryForm() {
-    $("categoryFormContainer").classList.add("hidden");
-    $("categoryForm").reset();
-}
-
 function openCategoryEditModal(cat) {
     editingCategoryId = cat.id;
     $("categoryEditName").value = cat.name;
@@ -291,6 +361,68 @@ function deleteCategory(cat) {
     updateDashboard();
     renderCategoriesList();
 }
+
+$("closeCategoriesListModal").addEventListener("click", closeCategoriesListModal);
+
+$("categoriesListModal").addEventListener("click", event => {
+    if (event.target === $("categoriesListModal")) closeCategoriesListModal();
+});
+
+$("closeCategoryEditModal").addEventListener("click", closeCategoryEditModal);
+
+$("categoryEditModal").addEventListener("click", event => {
+    if (event.target === $("categoryEditModal")) closeCategoryEditModal();
+});
+
+$("categoryEditForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    if (!editingCategoryId) return;
+
+    const newName = $("categoryEditName").value.trim();
+    if (!newName) return;
+
+    const type = currentCategoriesType;
+    const exists = categories[type].some(
+        c => c.id !== editingCategoryId && c.name.toLowerCase() === newName.toLowerCase()
+    );
+
+    if (exists) {
+        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+        return;
+    }
+
+    const cat = categories[type].find(c => c.id === editingCategoryId);
+    if (cat) cat.name = newName;
+
+    saveData();
+    updateDashboard();
+    closeCategoryEditModal();
+    renderCategoriesList();
+});
+
+// Handlers globais para botões + e ⚙️ dentro dos formulários
+document.addEventListener("click", event => {
+    const newBtn = event.target.closest("[data-new-category]");
+    if (newBtn) {
+        openNewCategoryModal(
+            newBtn.getAttribute("data-new-category"),
+            newBtn.getAttribute("data-category-type")
+        );
+        return;
+    }
+
+    const manageBtn = event.target.closest("[data-manage-category]");
+    if (manageBtn) {
+        const targetId = manageBtn.getAttribute("data-manage-category");
+        const type = resolveCategoryType(
+            manageBtn.getAttribute("data-category-type"),
+            targetId
+        );
+        openCategoriesListForType(type);
+        return;
+    }
+});
 
 // ==========================================
 // PERSISTÊNCIA LOCAL + DRIVE
@@ -2343,89 +2475,6 @@ $("recurringForm").addEventListener("submit", event => {
 });
 
 // ==========================================
-// CATEGORIAS — EVENTOS
-// ==========================================
-
-$("openCategoriesMenu").addEventListener("click", openCategoriesMenu);
-$("closeCategoriesMenu").addEventListener("click", closeCategoriesMenu);
-
-$("openIncomeCategories").addEventListener("click", () => openCategoriesList("income"));
-$("openCreditCategories").addEventListener("click", () => openCategoriesList("credit"));
-$("openDebitCategories").addEventListener("click", () => openCategoriesList("debit"));
-
-$("openCategoryForm").addEventListener("click", openCategoryForm);
-$("closeCategoryForm").addEventListener("click", closeCategoryForm);
-$("closeCategoriesListModal").addEventListener("click", closeCategoriesListModal);
-
-$("categoriesMenuModal").addEventListener("click", event => {
-    if (event.target === $("categoriesMenuModal")) closeCategoriesMenu();
-});
-
-$("categoriesListModal").addEventListener("click", event => {
-    if (event.target === $("categoriesListModal")) closeCategoriesListModal();
-});
-
-$("categoryForm").addEventListener("submit", event => {
-    event.preventDefault();
-
-    const name = $("categoryName").value.trim();
-    if (!name) return;
-
-    const type = currentCategoriesType;
-    const exists = categories[type].some(
-        c => c.name.toLowerCase() === name.toLowerCase()
-    );
-
-    if (exists) {
-        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
-        return;
-    }
-
-    categories[type].push({
-        id: makeId(),
-        name,
-        color: nextColor()
-    });
-
-    saveData();
-    closeCategoryForm();
-    renderCategoriesList();
-});
-
-$("closeCategoryEditModal").addEventListener("click", closeCategoryEditModal);
-
-$("categoryEditModal").addEventListener("click", event => {
-    if (event.target === $("categoryEditModal")) closeCategoryEditModal();
-});
-
-$("categoryEditForm").addEventListener("submit", event => {
-    event.preventDefault();
-
-    if (!editingCategoryId) return;
-
-    const newName = $("categoryEditName").value.trim();
-    if (!newName) return;
-
-    const type = currentCategoriesType;
-    const exists = categories[type].some(
-        c => c.id !== editingCategoryId && c.name.toLowerCase() === newName.toLowerCase()
-    );
-
-    if (exists) {
-        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
-        return;
-    }
-
-    const cat = categories[type].find(c => c.id === editingCategoryId);
-    if (cat) cat.name = newName;
-
-    saveData();
-    updateDashboard();
-    closeCategoryEditModal();
-    renderCategoriesList();
-});
-
-// ==========================================
 // MENU DE LANÇAMENTOS DO MÊS (EVENTOS)
 // ==========================================
 
@@ -2568,7 +2617,7 @@ let touchTracking = false;
 function isInteractiveTarget(target) {
     if (!target) return false;
     return !!target.closest(
-        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs"
+        "input, select, textarea, button, label, a, .money-cell, .delete-button, .outline-button, .checkbox-option, .modal-card, .month-selector, .app-tabs, .category-row"
     );
 }
 
