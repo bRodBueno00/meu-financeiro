@@ -731,8 +731,10 @@ function getMonthlyOccurrences() {
 // FATURA DO CARTÃO
 // ==========================================
 
-function getInvoiceMonth(transaction) {
-    const purchase = parseDate(transaction.date);
+function getInvoiceMonthFromDate(dateStr) {
+    if (!dateStr) return null;
+
+    const purchase = parseDate(dateStr);
     const year = purchase.getFullYear();
     const month = purchase.getMonth();
 
@@ -778,6 +780,11 @@ function getInvoiceMonth(transaction) {
     return null;
 }
 
+function getInvoiceMonth(transaction) {
+    const dateStr = transaction.date || transaction.occurrenceDate || null;
+    return getInvoiceMonthFromDate(dateStr);
+}
+
 function getInvoiceAmount(date = selectedDate) {
     try {
         const key = monthKey(date);
@@ -789,9 +796,10 @@ function getInvoiceAmount(date = selectedDate) {
             .reduce((sum, item) => sum + item.amount, 0);
 
         const recurringCredit = getOccurrencesForMonth(date)
-            .filter(item =>
-                item.type === "credit" && getInvoiceMonth(item) === key
-            )
+            .filter(item => {
+                if (item.type !== "credit") return false;
+                return getInvoiceMonthFromDate(item.occurrenceDate) === key;
+            })
             .reduce((sum, item) => sum + item.amount, 0);
 
         return manualCredit + recurringCredit;
