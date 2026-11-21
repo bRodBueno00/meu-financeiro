@@ -94,6 +94,15 @@ function suggestedDateInSelectedMonth() {
     return localDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), safeDay, 12));
 }
 
+function safeOn(id, event, handler) {
+    const el = $(id);
+    if (!el) {
+        console.warn("Elemento não encontrado:", id);
+        return;
+    }
+    el.addEventListener(event, handler);
+}
+
 // ==========================================
 // CATEGORIAS
 // ==========================================
@@ -154,10 +163,10 @@ function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
     select.value = normalizeCategoryId(type, selectedId);
 }
 
-// Contexto: cada botão "+" ou "⚙️" sabe qual tipo usar
 function resolveCategoryType(buttonType, targetSelectId) {
     if (targetSelectId === "transactionCategory") {
-        return $("transactionType").value;
+        const typeEl = $("transactionType");
+        return typeEl ? typeEl.value : currentCategoriesType;
     }
     if (targetSelectId === "standaloneCategory") {
         return currentTransactionsType;
@@ -187,31 +196,37 @@ function openNewCategoryModal(targetSelectId, buttonType) {
         debit: "Débito"
     };
 
-    $("newCategoryTypeLabel").textContent =
-        `Tipo: ${labels[pendingCategoryTarget.type]}`;
+    const labelEl = $("newCategoryTypeLabel");
+    if (labelEl) labelEl.textContent = `Tipo: ${labels[pendingCategoryTarget.type] || ""}`;
 
-    $("newCategoryForm").reset();
-    $("newCategoryModal").classList.remove("hidden");
-    $("newCategoryName").focus();
+    const form = $("newCategoryForm");
+    if (form) form.reset();
+
+    const modal = $("newCategoryModal");
+    if (modal) modal.classList.remove("hidden");
+
+    const input = $("newCategoryName");
+    if (input) input.focus();
 }
 
 function closeNewCategoryModal() {
-    $("newCategoryModal").classList.add("hidden");
+    const modal = $("newCategoryModal");
+    if (modal) modal.classList.add("hidden");
     pendingCategoryTarget = null;
 }
 
-$("closeNewCategoryModal").addEventListener("click", closeNewCategoryModal);
+safeOn("closeNewCategoryModal", "click", closeNewCategoryModal);
 
-$("newCategoryModal").addEventListener("click", event => {
+safeOn("newCategoryModal", "click", event => {
     if (event.target === $("newCategoryModal")) closeNewCategoryModal();
 });
 
-$("newCategoryForm").addEventListener("submit", event => {
+safeOn("newCategoryForm", "submit", event => {
     event.preventDefault();
 
     if (!pendingCategoryTarget) return;
 
-    const name = $("newCategoryName").value.trim();
+    const name = ($("newCategoryName").value || "").trim();
     if (!name) return;
 
     const type = pendingCategoryTarget.type;
@@ -252,16 +267,21 @@ function openCategoriesListForType(type) {
         debit: "Categorias de saída no débito"
     };
 
-    $("categoriesListTitle").textContent = labels[type];
-    $("categoriesListTypeLabel").textContent = "Categorias atuais:";
+    const title = $("categoriesListTitle");
+    if (title) title.textContent = labels[type] || "Categorias";
 
-    $("categoriesListModal").classList.remove("hidden");
+    const typeLabel = $("categoriesListTypeLabel");
+    if (typeLabel) typeLabel.textContent = "Categorias atuais:";
+
+    const modal = $("categoriesListModal");
+    if (modal) modal.classList.remove("hidden");
 
     renderCategoriesList();
 }
 
 function closeCategoriesListModal() {
-    $("categoriesListModal").classList.add("hidden");
+    const modal = $("categoriesListModal");
+    if (modal) modal.classList.add("hidden");
 }
 
 function renderCategoriesList() {
@@ -325,12 +345,15 @@ function renderCategoriesList() {
 
 function openCategoryEditModal(cat) {
     editingCategoryId = cat.id;
-    $("categoryEditName").value = cat.name;
-    $("categoryEditModal").classList.remove("hidden");
+    const input = $("categoryEditName");
+    if (input) input.value = cat.name;
+    const modal = $("categoryEditModal");
+    if (modal) modal.classList.remove("hidden");
 }
 
 function closeCategoryEditModal() {
-    $("categoryEditModal").classList.add("hidden");
+    const modal = $("categoryEditModal");
+    if (modal) modal.classList.add("hidden");
     editingCategoryId = null;
 }
 
@@ -362,24 +385,25 @@ function deleteCategory(cat) {
     renderCategoriesList();
 }
 
-$("closeCategoriesListModal").addEventListener("click", closeCategoriesListModal);
+safeOn("closeCategoriesListModal", "click", closeCategoriesListModal);
 
-$("categoriesListModal").addEventListener("click", event => {
+safeOn("categoriesListModal", "click", event => {
     if (event.target === $("categoriesListModal")) closeCategoriesListModal();
 });
 
-$("closeCategoryEditModal").addEventListener("click", closeCategoryEditModal);
+safeOn("closeCategoryEditModal", "click", closeCategoryEditModal);
 
-$("categoryEditModal").addEventListener("click", event => {
+safeOn("categoryEditModal", "click", event => {
     if (event.target === $("categoryEditModal")) closeCategoryEditModal();
 });
 
-$("categoryEditForm").addEventListener("submit", event => {
+safeOn("categoryEditForm", "submit", event => {
     event.preventDefault();
 
     if (!editingCategoryId) return;
 
-    const newName = $("categoryEditName").value.trim();
+    const input = $("categoryEditName");
+    const newName = input ? input.value.trim() : "";
     if (!newName) return;
 
     const type = currentCategoriesType;
@@ -401,7 +425,6 @@ $("categoryEditForm").addEventListener("submit", event => {
     renderCategoriesList();
 });
 
-// Handlers globais para botões + e ⚙️ dentro dos formulários
 document.addEventListener("click", event => {
     const newBtn = event.target.closest("[data-new-category]");
     if (newBtn) {
@@ -605,7 +628,7 @@ function loadData() {
         rebuildSavedDescriptions();
 
     } catch (error) {
-        alert("Erro ao carregar os dados salvos.");
+        console.error("Erro ao carregar dados:", error);
     }
 }
 
@@ -620,9 +643,12 @@ function setCloudStatus(text) {
 
 function updateCloudButtons() {
     const logged = !!accessToken;
-    $("googleLoginButton").classList.toggle("hidden", logged);
-    $("googleLogoutButton").classList.toggle("hidden", !logged);
-    $("syncNowButton").classList.toggle("hidden", !logged);
+    const loginBtn = $("googleLoginButton");
+    const logoutBtn = $("googleLogoutButton");
+    const syncBtn = $("syncNowButton");
+    if (loginBtn) loginBtn.classList.toggle("hidden", logged);
+    if (logoutBtn) logoutBtn.classList.toggle("hidden", !logged);
+    if (syncBtn) syncBtn.classList.toggle("hidden", !logged);
 }
 
 function initGoogleAuth() {
@@ -1282,76 +1308,84 @@ function getTodayBalance() {
 // ==========================================
 
 function updateDashboard() {
-    const actual = transactions.filter(item =>
-        item.date.startsWith(monthKey(selectedDate))
-    );
+    try {
+        const actual = transactions.filter(item =>
+            item.date.startsWith(monthKey(selectedDate))
+        );
 
-    const scheduled = getMonthlyOccurrences();
+        const scheduled = getMonthlyOccurrences();
 
-    const incomeActual = actual
-        .filter(x => x.type === "income")
-        .reduce((sum, x) => sum + x.amount, 0);
+        const incomeActual = actual
+            .filter(x => x.type === "income")
+            .reduce((sum, x) => sum + x.amount, 0);
 
-    const debitActual = actual
-        .filter(x => x.type === "debit")
-        .reduce((sum, x) => sum + x.amount, 0);
+        const debitActual = actual
+            .filter(x => x.type === "debit")
+            .reduce((sum, x) => sum + x.amount, 0);
 
-    const incomePlanned = scheduled
-        .filter(x => x.type === "income")
-        .reduce((sum, x) => sum + x.amount, 0);
+        const incomePlanned = scheduled
+            .filter(x => x.type === "income")
+            .reduce((sum, x) => sum + x.amount, 0);
 
-    const debitPlanned = scheduled
-        .filter(x => x.type === "debit")
-        .reduce((sum, x) => sum + x.amount, 0);
+        const debitPlanned = scheduled
+            .filter(x => x.type === "debit")
+            .reduce((sum, x) => sum + x.amount, 0);
 
-    const invoice = getInvoiceAmount();
-    const opening = getOpeningBalance(selectedDate);
+        const invoice = getInvoiceAmount();
+        const opening = getOpeningBalance(selectedDate);
 
-    const totalIncome = incomeActual + incomePlanned;
-    const totalExpenses = debitActual + debitPlanned + invoice;
-    const closing = opening + totalIncome - totalExpenses;
+        const totalIncome = incomeActual + incomePlanned;
+        const totalExpenses = debitActual + debitPlanned + invoice;
+        const closing = opening + totalIncome - totalExpenses;
 
-    $("balance").textContent = money(closing);
-    $("totalIncome").textContent = money(totalIncome);
-    $("totalInvoice").textContent = money(invoice);
-    $("totalExpenses").textContent = money(debitActual + debitPlanned);
+        const setText = (id, value) => {
+            const el = $(id);
+            if (el) el.textContent = value;
+        };
 
-    $("todayBalance").textContent = money(getTodayBalance());
+        setText("balance", money(closing));
+        setText("totalIncome", money(totalIncome));
+        setText("totalInvoice", money(invoice));
+        setText("totalExpenses", money(debitActual + debitPlanned));
+        setText("todayBalance", money(getTodayBalance()));
 
-    $("currentMonth").textContent =
-        selectedDate.toLocaleDateString("pt-BR", {
+        setText("currentMonth",
+            selectedDate.toLocaleDateString("pt-BR", {
+                month: "long",
+                year: "numeric"
+            })
+        );
+
+        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
             month: "long",
             year: "numeric"
         });
 
-    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric"
-    });
+        setText("balanceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
+        setText("invoiceConfigMonthLabel", `Mês de configuração: ${monthLabel}`);
 
-    if ($("balanceConfigMonthLabel")) {
-        $("balanceConfigMonthLabel").textContent = `Mês de configuração: ${monthLabel}`;
+        const initialBalanceEl = $("initialBalance");
+        if (initialBalanceEl) initialBalanceEl.value = opening.toFixed(2);
+
+        const hasManualBalance = Object.prototype.hasOwnProperty.call(
+            initialBalances,
+            monthKey(selectedDate)
+        );
+
+        setText("initialBalanceInfo",
+            hasManualBalance
+                ? "Este mês possui um saldo inicial definido manualmente. Para voltar ao automático, exclua esse ajuste."
+                : "Preenchido automaticamente com o saldo final do mês anterior. Você pode alterar e salvar manualmente."
+        );
+
+        setText("invoiceAmount", money(invoice));
+        setText("invoiceDue", formatDate(getInvoiceDueDate()));
+
+        renderInvoiceSettings();
+        renderDailyCalendar(actual, scheduled);
+    } catch (error) {
+        console.error("Erro em updateDashboard:", error);
     }
-    if ($("invoiceConfigMonthLabel")) {
-        $("invoiceConfigMonthLabel").textContent = `Mês de configuração: ${monthLabel}`;
-    }
-
-    $("initialBalance").value = opening.toFixed(2);
-
-    const hasManualBalance = Object.prototype.hasOwnProperty.call(
-        initialBalances,
-        monthKey(selectedDate)
-    );
-
-    $("initialBalanceInfo").textContent = hasManualBalance
-        ? "Este mês possui um saldo inicial definido manualmente. Para voltar ao automático, exclua esse ajuste."
-        : "Preenchido automaticamente com o saldo final do mês anterior. Você pode alterar e salvar manualmente.";
-
-    $("invoiceAmount").textContent = money(invoice);
-    $("invoiceDue").textContent = formatDate(getInvoiceDueDate());
-
-    renderInvoiceSettings();
-    renderDailyCalendar(actual, scheduled);
 }
 
 // ==========================================
@@ -1361,16 +1395,22 @@ function updateDashboard() {
 function setActiveTab(view) {
     currentView = view;
 
-    $("tabPainel").classList.toggle("active", view === "painel");
-    $("tabDashboard").classList.toggle("active", view === "dashboard");
+    const tabPainel = $("tabPainel");
+    const tabDashboard = $("tabDashboard");
+    const painelView = $("painelView");
+    const dashboardView = $("dashboardView");
+    const painelHeader = $("painelHeaderContent");
 
-    $("painelView").classList.toggle("hidden", view !== "painel");
-    $("dashboardView").classList.toggle("hidden", view !== "dashboard");
-    $("painelHeaderContent").classList.toggle("hidden", view !== "painel");
+    if (tabPainel) tabPainel.classList.toggle("active", view === "painel");
+    if (tabDashboard) tabDashboard.classList.toggle("active", view === "dashboard");
+
+    if (painelView) painelView.classList.toggle("hidden", view !== "painel");
+    if (dashboardView) dashboardView.classList.toggle("hidden", view !== "dashboard");
+    if (painelHeader) painelHeader.classList.toggle("hidden", view !== "painel");
 }
 
-$("tabPainel").addEventListener("click", () => setActiveTab("painel"));
-$("tabDashboard").addEventListener("click", () => setActiveTab("dashboard"));
+safeOn("tabPainel", "click", () => setActiveTab("painel"));
+safeOn("tabDashboard", "click", () => setActiveTab("dashboard"));
 
 // ==========================================
 // CALENDÁRIO FINANCEIRO
@@ -1378,6 +1418,7 @@ $("tabDashboard").addEventListener("click", () => setActiveTab("dashboard"));
 
 function renderDailyCalendar(actual, scheduled) {
     const container = $("dailyList");
+    if (!container) return;
     container.innerHTML = "";
 
     const year = selectedDate.getFullYear();
@@ -1475,6 +1516,7 @@ function createEditableCell(value, className, type, date, tooltip = "") {
 function openDayTransactionsModal(date, type) {
     const modal = $("dayTransactionsModal");
     const list = $("dayTransactionsList");
+    if (!modal || !list) return;
 
     $("dayModalTitle").textContent = `Lançamentos de ${formatDate(date)}`;
 
@@ -1621,7 +1663,8 @@ function openDayTransactionsModal(date, type) {
 }
 
 function closeDayModal() {
-    $("dayTransactionsModal").classList.add("hidden");
+    const modal = $("dayTransactionsModal");
+    if (modal) modal.classList.add("hidden");
 }
 
 function editTransaction(item) {
@@ -1708,6 +1751,7 @@ function openTransactionForm(type, date) {
     pendingTransactionDate = date;
 
     const modal = $("transactionFormModal");
+    if (!modal) return;
 
     $("transactionFormTitle").textContent = "Novo lançamento";
     $("transactionDescription").value = "";
@@ -1725,30 +1769,37 @@ function openTransactionForm(type, date) {
 }
 
 function closeTransactionForm() {
-    $("transactionFormModal").classList.add("hidden");
-    $("transactionForm").reset();
+    const modal = $("transactionFormModal");
+    if (modal) modal.classList.add("hidden");
+    const form = $("transactionForm");
+    if (form) form.reset();
     pendingTransactionType = null;
     pendingTransactionDate = null;
 }
 
 function updateInstallmentVisibility() {
-    const type = $("transactionType").value;
+    const typeEl = $("transactionType");
     const container = $("installmentContainer");
+    if (!typeEl || !container) return;
+
+    const type = typeEl.value;
 
     if (type === "credit") {
         container.classList.remove("hidden");
     } else {
         container.classList.add("hidden");
-        $("transactionInstallments").value = "1";
+        const installmentsEl = $("transactionInstallments");
+        if (installmentsEl) installmentsEl.value = "1";
     }
 
-    populateCategorySelect("transactionCategory", type, $("transactionCategory").value);
+    const catEl = $("transactionCategory");
+    populateCategorySelect("transactionCategory", type, catEl ? catEl.value : OUTROS_ID);
 }
 
-$("transactionType").addEventListener("change", updateInstallmentVisibility);
-$("closeTransactionForm").addEventListener("click", closeTransactionForm);
+safeOn("transactionType", "change", updateInstallmentVisibility);
+safeOn("closeTransactionForm", "click", closeTransactionForm);
 
-$("transactionForm").addEventListener("submit", event => {
+safeOn("transactionForm", "submit", event => {
     event.preventDefault();
 
     const description = $("transactionDescription").value.trim();
@@ -1825,16 +1876,20 @@ $("transactionForm").addEventListener("submit", event => {
 // ==========================================
 
 function openTransactionsMenu() {
-    $("transactionsMenu").classList.remove("hidden");
+    const modal = $("transactionsMenu");
+    if (!modal) return;
+    modal.classList.remove("hidden");
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
-    $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+    const label = $("transactionsMonthLabel");
+    if (label) label.textContent = `Lançamentos de ${monthLabel}`;
 }
 
 function closeTransactionsMenu() {
-    $("transactionsMenu").classList.add("hidden");
+    const modal = $("transactionsMenu");
+    if (modal) modal.classList.add("hidden");
 }
 
 function openTransactionsList(type) {
@@ -1846,23 +1901,29 @@ function openTransactionsList(type) {
         debit: "Saídas no débito do mês"
     };
 
-    $("transactionsListTitle").textContent = labels[type];
+    const title = $("transactionsListTitle");
+    if (title) title.textContent = labels[type];
 
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
-    $("transactionsListMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+    const monthLabelEl = $("transactionsListMonthLabel");
+    if (monthLabelEl) monthLabelEl.textContent = `Lançamentos de ${monthLabel}`;
 
-    $("transactionFormContainer").classList.add("hidden");
-    $("transactionsListModal").classList.remove("hidden");
+    const formContainer = $("transactionFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
+    const modal = $("transactionsListModal");
+    if (modal) modal.classList.remove("hidden");
 
     renderTransactionsList();
 }
 
 function closeTransactionsListModal() {
-    $("transactionsListModal").classList.add("hidden");
-    $("transactionFormContainer").classList.add("hidden");
+    const modal = $("transactionsListModal");
+    if (modal) modal.classList.add("hidden");
+    const formContainer = $("transactionFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
 }
 
 function renderTransactionsList() {
@@ -1956,11 +2017,15 @@ function renderTransactionsList() {
 // ==========================================
 
 function openStandaloneTransactionForm() {
-    $("transactionFormContainer").classList.remove("hidden");
-    $("standaloneTransactionForm").reset();
+    const formContainer = $("transactionFormContainer");
+    if (formContainer) formContainer.classList.remove("hidden");
+    const form = $("standaloneTransactionForm");
+    if (form) form.reset();
 
-    $("standaloneDate").value = suggestedDateInSelectedMonth();
-    $("standaloneInstallments").value = "1";
+    const dateEl = $("standaloneDate");
+    if (dateEl) dateEl.value = suggestedDateInSelectedMonth();
+    const installmentsEl = $("standaloneInstallments");
+    if (installmentsEl) installmentsEl.value = "1";
 
     populateCategorySelect("standaloneCategory", currentTransactionsType, OUTROS_ID);
 
@@ -1970,20 +2035,23 @@ function openStandaloneTransactionForm() {
 
 function updateStandaloneInstallmentVisibility() {
     const container = $("standaloneInstallmentContainer");
+    if (!container) return;
 
     if (currentTransactionsType === "credit") {
         container.classList.remove("hidden");
     } else {
         container.classList.add("hidden");
-        $("standaloneInstallments").value = "1";
+        const installmentsEl = $("standaloneInstallments");
+        if (installmentsEl) installmentsEl.value = "1";
     }
 }
 
-$("closeStandaloneForm").addEventListener("click", () => {
-    $("transactionFormContainer").classList.add("hidden");
+safeOn("closeStandaloneForm", "click", () => {
+    const formContainer = $("transactionFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
 });
 
-$("standaloneTransactionForm").addEventListener("submit", event => {
+safeOn("standaloneTransactionForm", "submit", event => {
     event.preventDefault();
 
     const description = $("standaloneDescription").value.trim();
@@ -2053,8 +2121,10 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
     saveData();
     updateDashboard();
 
-    $("standaloneTransactionForm").reset();
-    $("transactionFormContainer").classList.add("hidden");
+    const form = $("standaloneTransactionForm");
+    if (form) form.reset();
+    const formContainer = $("transactionFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
     renderTransactionsList();
 });
 
@@ -2063,16 +2133,20 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
 // ==========================================
 
 function openRecurringMenu() {
-    $("recurringMenu").classList.remove("hidden");
+    const modal = $("recurringMenu");
+    if (!modal) return;
+    modal.classList.remove("hidden");
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
-    $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
+    const label = $("recurringMonthLabel");
+    if (label) label.textContent = `Válidos em ${monthLabel}`;
 }
 
 function closeRecurringMenu() {
-    $("recurringMenu").classList.add("hidden");
+    const modal = $("recurringMenu");
+    if (modal) modal.classList.add("hidden");
 }
 
 function openRecurringList(type) {
@@ -2084,23 +2158,29 @@ function openRecurringList(type) {
         debit: "Saídas no débito recorrentes"
     };
 
-    $("recurringListTitle").textContent = labels[type];
+    const title = $("recurringListTitle");
+    if (title) title.textContent = labels[type];
 
     const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
         year: "numeric"
     });
-    $("recurringListMonthLabel").textContent = `Válidos em ${monthLabel}`;
+    const monthLabelEl = $("recurringListMonthLabel");
+    if (monthLabelEl) monthLabelEl.textContent = `Válidos em ${monthLabel}`;
 
-    $("recurringFormContainer").classList.add("hidden");
-    $("recurringListModal").classList.remove("hidden");
+    const formContainer = $("recurringFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
+    const modal = $("recurringListModal");
+    if (modal) modal.classList.remove("hidden");
 
     renderRecurringList();
 }
 
 function closeRecurringListModal() {
-    $("recurringListModal").classList.add("hidden");
-    $("recurringFormContainer").classList.add("hidden");
+    const modal = $("recurringListModal");
+    if (modal) modal.classList.add("hidden");
+    const formContainer = $("recurringFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
 }
 
 function renderRecurringList() {
@@ -2253,21 +2333,23 @@ function openRecurringEditModal(item) {
 
     populateDescriptionOptions("recurringEditDescription", "recurringEditDescriptionList");
 
-    $("recurringEditModal").classList.remove("hidden");
+    const modal = $("recurringEditModal");
+    if (modal) modal.classList.remove("hidden");
 }
 
 function closeRecurringEditModal() {
-    $("recurringEditModal").classList.add("hidden");
+    const modal = $("recurringEditModal");
+    if (modal) modal.classList.add("hidden");
     editingRecurringId = null;
 }
 
-$("closeRecurringEditModal").addEventListener("click", closeRecurringEditModal);
+safeOn("closeRecurringEditModal", "click", closeRecurringEditModal);
 
-$("recurringEditModal").addEventListener("click", event => {
+safeOn("recurringEditModal", "click", event => {
     if (event.target === $("recurringEditModal")) closeRecurringEditModal();
 });
 
-$("recurringEditResetButton").addEventListener("click", () => {
+safeOn("recurringEditResetButton", "click", () => {
     if (!editingRecurringId) return;
 
     const overrideKey = getOverrideKey(editingRecurringId, selectedDate);
@@ -2284,7 +2366,7 @@ $("recurringEditResetButton").addEventListener("click", () => {
     closeRecurringEditModal();
 });
 
-$("recurringEditForm").addEventListener("submit", event => {
+safeOn("recurringEditForm", "submit", event => {
     event.preventDefault();
 
     if (!editingRecurringId) return;
@@ -2402,34 +2484,38 @@ $("recurringEditForm").addEventListener("submit", event => {
 // FORMULÁRIO DE NOVO RECORRENTE
 // ==========================================
 
-$("openRecurringMenu").addEventListener("click", openRecurringMenu);
-$("closeRecurringMenu").addEventListener("click", closeRecurringMenu);
+safeOn("openRecurringMenu", "click", openRecurringMenu);
+safeOn("closeRecurringMenu", "click", closeRecurringMenu);
 
-$("openIncomeRecurring").addEventListener("click", () => openRecurringList("income"));
-$("openCreditRecurring").addEventListener("click", () => openRecurringList("credit"));
-$("openDebitRecurring").addEventListener("click", () => openRecurringList("debit"));
+safeOn("openIncomeRecurring", "click", () => openRecurringList("income"));
+safeOn("openCreditRecurring", "click", () => openRecurringList("credit"));
+safeOn("openDebitRecurring", "click", () => openRecurringList("debit"));
 
-$("openRecurringForm").addEventListener("click", () => {
-    $("recurringFormContainer").classList.remove("hidden");
-    $("recurringForm").reset();
+safeOn("openRecurringForm", "click", () => {
+    const formContainer = $("recurringFormContainer");
+    if (formContainer) formContainer.classList.remove("hidden");
+    const form = $("recurringForm");
+    if (form) form.reset();
 
-    $("recurringStart").value = suggestedDateInSelectedMonth();
+    const startEl = $("recurringStart");
+    if (startEl) startEl.value = suggestedDateInSelectedMonth();
 
     populateCategorySelect("recurringCategory", currentRecurringType, OUTROS_ID);
     populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 });
 
-$("closeRecurringForm").addEventListener("click", () => {
-    $("recurringFormContainer").classList.add("hidden");
+safeOn("closeRecurringForm", "click", () => {
+    const formContainer = $("recurringFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
 });
 
-$("closeRecurringListModal").addEventListener("click", closeRecurringListModal);
+safeOn("closeRecurringListModal", "click", closeRecurringListModal);
 
-$("recurringListModal").addEventListener("click", event => {
+safeOn("recurringListModal", "click", event => {
     if (event.target === $("recurringListModal")) closeRecurringListModal();
 });
 
-$("recurringForm").addEventListener("submit", event => {
+safeOn("recurringForm", "submit", event => {
     event.preventDefault();
 
     const description = $("recurringDescription").value.trim();
@@ -2466,11 +2552,14 @@ $("recurringForm").addEventListener("submit", event => {
     saveData();
     updateDashboard();
 
-    $("recurringForm").reset();
+    const form = $("recurringForm");
+    if (form) form.reset();
 
-    $("recurringStart").value = suggestedDateInSelectedMonth();
+    const startEl = $("recurringStart");
+    if (startEl) startEl.value = suggestedDateInSelectedMonth();
 
-    $("recurringFormContainer").classList.add("hidden");
+    const formContainer = $("recurringFormContainer");
+    if (formContainer) formContainer.classList.add("hidden");
     renderRecurringList();
 });
 
@@ -2478,24 +2567,24 @@ $("recurringForm").addEventListener("submit", event => {
 // MENU DE LANÇAMENTOS DO MÊS (EVENTOS)
 // ==========================================
 
-$("openTransactionsMenu").addEventListener("click", openTransactionsMenu);
-$("closeTransactionsMenu").addEventListener("click", closeTransactionsMenu);
+safeOn("openTransactionsMenu", "click", openTransactionsMenu);
+safeOn("closeTransactionsMenu", "click", closeTransactionsMenu);
 
-$("openIncomeTransactions").addEventListener("click", () => openTransactionsList("income"));
-$("openCreditTransactions").addEventListener("click", () => openTransactionsList("credit"));
-$("openDebitTransactions").addEventListener("click", () => openTransactionsList("debit"));
+safeOn("openIncomeTransactions", "click", () => openTransactionsList("income"));
+safeOn("openCreditTransactions", "click", () => openTransactionsList("credit"));
+safeOn("openDebitTransactions", "click", () => openTransactionsList("debit"));
 
-$("openTransactionForm").addEventListener("click", () => {
+safeOn("openTransactionForm", "click", () => {
     openStandaloneTransactionForm();
 });
 
-$("closeTransactionsListModal").addEventListener("click", closeTransactionsListModal);
+safeOn("closeTransactionsListModal", "click", closeTransactionsListModal);
 
-$("transactionsListModal").addEventListener("click", event => {
+safeOn("transactionsListModal", "click", event => {
     if (event.target === $("transactionsListModal")) closeTransactionsListModal();
 });
 
-$("transactionsMenu").addEventListener("click", event => {
+safeOn("transactionsMenu", "click", event => {
     if (event.target === $("transactionsMenu")) closeTransactionsMenu();
 });
 
@@ -2560,10 +2649,10 @@ function navigateMonth(offset) {
     }
 }
 
-$("prevMonth").addEventListener("click", () => navigateMonth(-1));
-$("nextMonth").addEventListener("click", () => navigateMonth(1));
+safeOn("prevMonth", "click", () => navigateMonth(-1));
+safeOn("nextMonth", "click", () => navigateMonth(1));
 
-$("goToCurrentMonth").addEventListener("click", () => {
+safeOn("goToCurrentMonth", "click", () => {
     const now = new Date();
     selectedDate = new Date(now.getFullYear(), now.getMonth(), 1, 12);
 
@@ -2686,11 +2775,11 @@ function setBackupSectionOpen(open) {
     if (icon) icon.textContent = open ? "▾" : "▸";
 }
 
-$("toggleCalendarButton").addEventListener("click", () => {
+safeOn("toggleCalendarButton", "click", () => {
     setCalendarSectionOpen(!calendarSectionOpen);
 });
 
-$("toggleBackupButton").addEventListener("click", () => {
+safeOn("toggleBackupButton", "click", () => {
     setBackupSectionOpen(!backupSectionOpen);
 });
 
@@ -2704,6 +2793,7 @@ function openDeleteOptions(scope) {
     deleteScope = scope;
 
     const modal = $("deleteOptionsModal");
+    if (!modal) return;
 
     const monthName = selectedDate.toLocaleDateString("pt-BR", {
         month: "long",
@@ -2725,7 +2815,8 @@ function openDeleteOptions(scope) {
 }
 
 function closeDeleteOptions() {
-    $("deleteOptionsModal").classList.add("hidden");
+    const modal = $("deleteOptionsModal");
+    if (modal) modal.classList.add("hidden");
 }
 
 function confirmSelectedDeletion() {
@@ -2819,32 +2910,32 @@ function confirmSelectedDeletion() {
     );
 }
 
-$("resetAppButton").addEventListener("click", () => {
+safeOn("resetAppButton", "click", () => {
     openDeleteOptions("all");
 });
 
-$("resetMonthButton").addEventListener("click", () => {
+safeOn("resetMonthButton", "click", () => {
     openDeleteOptions("month");
 });
 
-$("cancelDeleteButton").addEventListener("click", closeDeleteOptions);
-$("confirmDeleteButton").addEventListener("click", confirmSelectedDeletion);
+safeOn("cancelDeleteButton", "click", closeDeleteOptions);
+safeOn("confirmDeleteButton", "click", confirmSelectedDeletion);
 
-$("deleteOptionsModal").addEventListener("click", event => {
+safeOn("deleteOptionsModal", "click", event => {
     if (event.target === $("deleteOptionsModal")) closeDeleteOptions();
 });
 
-$("closeDayModalButton").addEventListener("click", closeDayModal);
+safeOn("closeDayModalButton", "click", closeDayModal);
 
-$("dayTransactionsModal").addEventListener("click", event => {
+safeOn("dayTransactionsModal", "click", event => {
     if (event.target === $("dayTransactionsModal")) closeDayModal();
 });
 
-$("transactionFormModal").addEventListener("click", event => {
+safeOn("transactionFormModal", "click", event => {
     if (event.target === $("transactionFormModal")) closeTransactionForm();
 });
 
-$("recurringMenu").addEventListener("click", event => {
+safeOn("recurringMenu", "click", event => {
     if (event.target === $("recurringMenu")) closeRecurringMenu();
 });
 
@@ -2852,40 +2943,46 @@ $("recurringMenu").addEventListener("click", event => {
 // SALVAR CONFIGURAÇÕES
 // ==========================================
 
-$("saveInitialBalance").addEventListener("click", saveInitialBalance);
-$("saveInvoiceSettings").addEventListener("click", saveInvoiceConfig);
+safeOn("saveInitialBalance", "click", saveInitialBalance);
+safeOn("saveInvoiceSettings", "click", saveInvoiceConfig);
 
 // ==========================================
 // BOTÕES DE CONFIGURAÇÃO (SALDO E FATURA)
 // ==========================================
 
-$("openBalanceConfig").addEventListener("click", () => {
+safeOn("openBalanceConfig", "click", () => {
     updateDashboard();
-    $("balanceConfigModal").classList.remove("hidden");
+    const modal = $("balanceConfigModal");
+    if (modal) modal.classList.remove("hidden");
 });
 
-$("closeBalanceConfig").addEventListener("click", () => {
-    $("balanceConfigModal").classList.add("hidden");
+safeOn("closeBalanceConfig", "click", () => {
+    const modal = $("balanceConfigModal");
+    if (modal) modal.classList.add("hidden");
 });
 
-$("balanceConfigModal").addEventListener("click", event => {
+safeOn("balanceConfigModal", "click", event => {
     if (event.target === $("balanceConfigModal")) {
-        $("balanceConfigModal").classList.add("hidden");
+        const modal = $("balanceConfigModal");
+        if (modal) modal.classList.add("hidden");
     }
 });
 
-$("openInvoiceConfig").addEventListener("click", () => {
+safeOn("openInvoiceConfig", "click", () => {
     updateDashboard();
-    $("invoiceConfigModal").classList.remove("hidden");
+    const modal = $("invoiceConfigModal");
+    if (modal) modal.classList.remove("hidden");
 });
 
-$("closeInvoiceConfig").addEventListener("click", () => {
-    $("invoiceConfigModal").classList.add("hidden");
+safeOn("closeInvoiceConfig", "click", () => {
+    const modal = $("invoiceConfigModal");
+    if (modal) modal.classList.add("hidden");
 });
 
-$("invoiceConfigModal").addEventListener("click", event => {
+safeOn("invoiceConfigModal", "click", event => {
     if (event.target === $("invoiceConfigModal")) {
-        $("invoiceConfigModal").classList.add("hidden");
+        const modal = $("invoiceConfigModal");
+        if (modal) modal.classList.add("hidden");
     }
 });
 
@@ -2893,7 +2990,7 @@ $("invoiceConfigModal").addEventListener("click", event => {
 // EXPORTAÇÃO DE BACKUP
 // ==========================================
 
-$("exportButton").addEventListener("click", () => {
+safeOn("exportButton", "click", () => {
     const backup = {
         application: "Meu Financeiro",
         version: 18,
@@ -2919,15 +3016,15 @@ $("exportButton").addEventListener("click", () => {
 
     URL.revokeObjectURL(url);
 
-    $("backupMessage").textContent =
-        "Backup gerado. Guarde o arquivo em uma pasta segura.";
+    const msg = $("backupMessage");
+    if (msg) msg.textContent = "Backup gerado. Guarde o arquivo em uma pasta segura.";
 });
 
 // ==========================================
 // IMPORTAÇÃO DE BACKUP
 // ==========================================
 
-$("importFile").addEventListener("change", async event => {
+safeOn("importFile", "change", async event => {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -2957,7 +3054,8 @@ $("importFile").addEventListener("change", async event => {
         saveData();
         updateDashboard();
 
-        $("backupMessage").textContent = "Backup importado com sucesso!";
+        const msg = $("backupMessage");
+        if (msg) msg.textContent = "Backup importado com sucesso!";
     } catch (error) {
         alert("Não foi possível importar. Verifique o arquivo JSON.");
     }
@@ -2969,9 +3067,9 @@ $("importFile").addEventListener("change", async event => {
 // BOTÕES DO GOOGLE DRIVE
 // ==========================================
 
-$("googleLoginButton").addEventListener("click", loginGoogle);
-$("googleLogoutButton").addEventListener("click", logoutGoogle);
-$("syncNowButton").addEventListener("click", async () => {
+safeOn("googleLoginButton", "click", loginGoogle);
+safeOn("googleLogoutButton", "click", logoutGoogle);
+safeOn("syncNowButton", "click", async () => {
     await saveToDrive();
     await loadFromDrive();
 });
@@ -3013,11 +3111,13 @@ $("syncNowButton").addEventListener("click", async () => {
         });
     }
 
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-        if (!localStorage.getItem(THEME_KEY)) {
-            applyTheme(e.matches ? "dark" : "light");
-        }
-    });
+    if (window.matchMedia) {
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+            if (!localStorage.getItem(THEME_KEY)) {
+                applyTheme(e.matches ? "dark" : "light");
+            }
+        });
+    }
 })();
 
 // ==========================================
