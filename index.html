@@ -210,8 +210,49 @@
                 </div>
             </div>
 
-            <div class="dash-filters-row">
-                <p id="dashPeriodLabel" class="dash-period-text"></p>
+            <p id="dashPeriodLabel" class="dash-period-text"></p>
+        </div>
+
+        <section class="section">
+            <h3>Resumo do período</h3>
+
+            <div class="dash-kpi-grid">
+                <div class="dash-kpi dash-kpi-income">
+                    <small>Entradas</small>
+                    <strong id="dashKpiIncome">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-debit">
+                    <small>Saídas no débito</small>
+                    <strong id="dashKpiDebit">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-invoice">
+                    <small>Fatura do cartão</small>
+                    <strong id="dashKpiInvoice">R$ 0,00</strong>
+                </div>
+                <div class="dash-kpi dash-kpi-balance">
+                    <small>Saldo do período</small>
+                    <strong id="dashKpiBalance">R$ 0,00</strong>
+                </div>
+            </div>
+
+            <div class="dash-compare">
+                <div class="dash-compare-header">
+                    <span>Débito × Entrada</span>
+                    <strong id="dashComparePercent">0%</strong>
+                </div>
+                <div class="dash-compare-track">
+                    <div id="dashCompareFill" class="dash-compare-fill"></div>
+                </div>
+                <p id="dashCompareHint" class="helper"></p>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="dash-analysis-header">
+                <div>
+                    <h3>Análise</h3>
+                    <p class="helper" style="margin:4px 0 0">Gráficos e rankings filtrados.</p>
+                </div>
                 <button id="toggleFiltersButton" class="dash-filter-toggle" type="button">
                     <span>Filtros</span>
                     <span id="dashFilterBadge" class="dash-filter-badge hidden">0</span>
@@ -284,62 +325,26 @@
                     Limpar filtros
                 </button>
             </div>
-        </div>
 
-        <section class="section">
-            <h3>Resumo do período</h3>
-
-            <div class="dash-kpi-grid">
-                <div class="dash-kpi dash-kpi-income">
-                    <small>Entradas</small>
-                    <strong id="dashKpiIncome">R$ 0,00</strong>
+            <div class="chart-section">
+                <h4 class="chart-title">Entradas × Saídas (mensal)</h4>
+                <div class="chart-wrapper">
+                    <canvas id="chartBars" class="chart-canvas"></canvas>
                 </div>
-                <div class="dash-kpi dash-kpi-debit">
-                    <small>Saídas no débito</small>
-                    <strong id="dashKpiDebit">R$ 0,00</strong>
-                </div>
-                <div class="dash-kpi dash-kpi-invoice">
-                    <small>Fatura do cartão</small>
-                    <strong id="dashKpiInvoice">R$ 0,00</strong>
-                </div>
-                <div class="dash-kpi dash-kpi-balance">
-                    <small>Saldo do período</small>
-                    <strong id="dashKpiBalance">R$ 0,00</strong>
+                <div class="chart-legend">
+                    <span><i class="dot green-dot"></i> Entradas</span>
+                    <span><i class="dot red-dot"></i> Saídas</span>
                 </div>
             </div>
 
-            <div class="dash-compare">
-                <div class="dash-compare-header">
-                    <span>Débito × Entrada</span>
-                    <strong id="dashComparePercent">0%</strong>
+            <div class="chart-section">
+                <h4 class="chart-title">Evolução do saldo</h4>
+                <div class="chart-wrapper">
+                    <canvas id="chartLine" class="chart-canvas"></canvas>
                 </div>
-                <div class="dash-compare-track">
-                    <div id="dashCompareFill" class="dash-compare-fill"></div>
-                </div>
-                <p id="dashCompareHint" class="helper"></p>
+                <p class="helper">Saldo ao final de cada mês dentro do período.</p>
             </div>
-        </section>
 
-        <section class="section">
-            <h3>Entradas × Saídas (mensal)</h3>
-            <div class="chart-wrapper">
-                <canvas id="chartBars" class="chart-canvas"></canvas>
-            </div>
-            <div class="chart-legend">
-                <span><i class="dot green-dot"></i> Entradas</span>
-                <span><i class="dot red-dot"></i> Saídas</span>
-            </div>
-        </section>
-
-        <section class="section">
-            <h3>Evolução do saldo</h3>
-            <div class="chart-wrapper">
-                <canvas id="chartLine" class="chart-canvas"></canvas>
-            </div>
-            <p class="helper">Saldo ao final de cada mês dentro do período.</p>
-        </section>
-
-        <section class="section">
             <div class="dash-top-row">
                 <div class="dash-top-col">
                     <h3>Top categorias</h3>
