@@ -1571,8 +1571,27 @@ function renderRecurringList() {
         return;
     }
 
-    activeItems.forEach(item => {
-        container.appendChild(buildRecurringRow(item));
+    const withOccurrence = activeItems.map(item => {
+        const result = recurringIsActiveInMonth(item, selectedDate);
+        return {
+            item,
+            occurrence: result ? result.occurrence : "",
+            amount: result ? result.amount : item.versions[0].amount
+        };
+    });
+
+    withOccurrence.sort((a, b) => {
+        if (a.occurrence !== b.occurrence) {
+            return a.occurrence.localeCompare(b.occurrence);
+        }
+        if (currentRecurringType === "income") {
+            return b.amount - a.amount;
+        }
+        return a.amount - b.amount;
+    });
+
+    withOccurrence.forEach(entry => {
+        container.appendChild(buildRecurringRow(entry.item));
     });
 }
 
