@@ -79,6 +79,7 @@ main {
     max-width: 750px;
     margin: auto;
     padding: 16px;
+    touch-action: pan-y;
 }
 
 .balance-card {
@@ -563,6 +564,8 @@ footer {
 
 .reset-section {
     border: 1px solid #fecaca;
+    border-radius: 12px;
+    padding: 16px;
 }
 
 .danger-button {
