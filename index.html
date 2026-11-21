@@ -17,7 +17,7 @@
     <div class="header-top">
         <div>
             <h1>Meu Financeiro</h1>
-            <p>Planejamento e controle</p>
+            <p>Planejamento e controle financeiro</p>
         </div>
         <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema" title="Alternar tema">
             <span id="themeToggleIcon">🌙</span>
@@ -210,7 +210,80 @@
                 </div>
             </div>
 
-            <p id="dashPeriodLabel" class="dash-period-text"></p>
+            <div class="dash-filters-row">
+                <p id="dashPeriodLabel" class="dash-period-text"></p>
+                <button id="toggleFiltersButton" class="dash-filter-toggle" type="button">
+                    <span>Filtros</span>
+                    <span id="dashFilterBadge" class="dash-filter-badge hidden">0</span>
+                    <span id="toggleFiltersIcon">▾</span>
+                </button>
+            </div>
+
+            <div id="filtersDropdown" class="dash-filters-dropdown hidden">
+                <div class="filter-group">
+                    <div class="filter-label-row">
+                        <label class="filter-label">Tipo de saída</label>
+                    </div>
+                    <div class="filter-check-list">
+                        <label class="filter-check-item">
+                            <input type="checkbox" id="filterTypeDebit" checked>
+                            <span>Débito</span>
+                        </label>
+                        <label class="filter-check-item">
+                            <input type="checkbox" id="filterTypeInvoice" checked>
+                            <span>Fatura do cartão</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <div class="filter-label-row">
+                        <label class="filter-label">Origem</label>
+                    </div>
+                    <div class="filter-check-list">
+                        <label class="filter-check-item">
+                            <input type="checkbox" id="filterOriginOneTime" checked>
+                            <span>Pontuais</span>
+                        </label>
+                        <label class="filter-check-item">
+                            <input type="checkbox" id="filterOriginRecurring" checked>
+                            <span>Recorrentes</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <div class="filter-label-row">
+                        <label class="filter-label">Categorias</label>
+                        <div class="filter-quick-actions">
+                            <button type="button" class="filter-mini-btn" data-cat-action="all">Todas</button>
+                            <button type="button" class="filter-mini-btn" data-cat-action="none">Nenhuma</button>
+                        </div>
+                    </div>
+                    <p class="helper filter-hint">Sem marcação = todas as categorias.</p>
+                    <div id="filterCategoriesList" class="filter-check-list"></div>
+                </div>
+
+                <div class="filter-group">
+                    <div class="filter-label-row">
+                        <label class="filter-label">Faixa de valor</label>
+                    </div>
+                    <div class="filter-range-row">
+                        <div>
+                            <label for="filterMinValue">Mín (R$)</label>
+                            <input id="filterMinValue" type="number" min="0" step="0.01" placeholder="0">
+                        </div>
+                        <div>
+                            <label for="filterMaxValue">Máx (R$)</label>
+                            <input id="filterMaxValue" type="number" min="0" step="0.01" placeholder="∞">
+                        </div>
+                    </div>
+                </div>
+
+                <button id="clearFiltersButton" class="cancel-button" type="button" style="margin-top:8px">
+                    Limpar filtros
+                </button>
+            </div>
         </div>
 
         <section class="section">
@@ -244,49 +317,6 @@
                     <div id="dashCompareFill" class="dash-compare-fill"></div>
                 </div>
                 <p id="dashCompareHint" class="helper"></p>
-            </div>
-        </section>
-
-        <section class="section">
-            <button id="toggleFiltersButton" class="expand-button" type="button">
-                <span>Filtros dos gráficos</span>
-                <span id="toggleFiltersIcon">▸</span>
-            </button>
-
-            <div id="filtersSection" class="hidden">
-                <div class="filter-group" style="margin-top:14px">
-                    <label class="filter-label">Tipos de saída</label>
-                    <div class="filter-chips">
-                        <button class="filter-chip active" data-filter-type="debit" type="button">Débito</button>
-                        <button class="filter-chip active" data-filter-type="invoice" type="button">Fatura</button>
-                    </div>
-                </div>
-
-                <div class="filter-group">
-                    <label class="filter-label">Origem</label>
-                    <div class="filter-chips">
-                        <button class="filter-chip active" data-filter-origin="oneTime" type="button">Pontuais</button>
-                        <button class="filter-chip active" data-filter-origin="recurring" type="button">Recorrentes</button>
-                    </div>
-                </div>
-
-                <div class="filter-group">
-                    <label class="filter-label">Faixa de valor</label>
-                    <div class="filter-range-row">
-                        <div>
-                            <label for="filterMinValue">Mín (R$)</label>
-                            <input id="filterMinValue" type="number" min="0" step="0.01" placeholder="0">
-                        </div>
-                        <div>
-                            <label for="filterMaxValue">Máx (R$)</label>
-                            <input id="filterMaxValue" type="number" min="0" step="0.01" placeholder="∞">
-                        </div>
-                    </div>
-                </div>
-
-                <button id="clearFiltersButton" class="cancel-button" type="button" style="margin-top:12px">
-                    Limpar filtros
-                </button>
             </div>
         </section>
 
