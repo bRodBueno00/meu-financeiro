@@ -102,11 +102,6 @@
                     Datas da fatura
                 </button>
             </div>
-            <div class="action-row" style="margin-top:10px">
-                <button id="openCategoriesMenu" class="primary-button" type="button">
-                    Categorias
-                </button>
-            </div>
         </section>
 
         <section class="section">
@@ -230,7 +225,11 @@
                     <datalist id="standaloneDescriptionList"></datalist>
 
                     <label for="standaloneCategory">Categoria</label>
-                    <select id="standaloneCategory" required></select>
+                    <div class="category-row">
+                        <select id="standaloneCategory" required></select>
+                        <button type="button" class="icon-button" data-new-category="standaloneCategory" data-category-type="standalone" title="Nova categoria">+</button>
+                        <button type="button" class="icon-button" data-manage-category="standaloneCategory" data-category-type="standalone" title="Gerenciar categorias">⚙️</button>
+                    </div>
 
                     <label for="standaloneAmount">Valor (R$)</label>
                     <input id="standaloneAmount" type="number" min="0.01" step="0.01" required>
@@ -323,7 +322,11 @@
                     <datalist id="recurringDescriptionList"></datalist>
 
                     <label for="recurringCategory">Categoria</label>
-                    <select id="recurringCategory" required></select>
+                    <div class="category-row">
+                        <select id="recurringCategory" required></select>
+                        <button type="button" class="icon-button" data-new-category="recurringCategory" data-category-type="recurring" title="Nova categoria">+</button>
+                        <button type="button" class="icon-button" data-manage-category="recurringCategory" data-category-type="recurring" title="Gerenciar categorias">⚙️</button>
+                    </div>
 
                     <label for="recurringAmount">Valor (R$)</label>
                     <input id="recurringAmount" type="number" min="0.01" step="0.01" required>
@@ -370,7 +373,11 @@
                 <datalist id="recurringEditDescriptionList"></datalist>
 
                 <label for="recurringEditCategory">Categoria</label>
-                <select id="recurringEditCategory" required></select>
+                <div class="category-row">
+                    <select id="recurringEditCategory" required></select>
+                    <button type="button" class="icon-button" data-new-category="recurringEditCategory" data-category-type="recurringEdit" title="Nova categoria">+</button>
+                    <button type="button" class="icon-button" data-manage-category="recurringEditCategory" data-category-type="recurringEdit" title="Gerenciar categorias">⚙️</button>
+                </div>
 
                 <label for="recurringEditAmount">Novo valor (R$)</label>
                 <input id="recurringEditAmount" type="number" min="0.01" step="0.01" required>
@@ -523,7 +530,11 @@
                 </select>
 
                 <label for="transactionCategory">Categoria</label>
-                <select id="transactionCategory" required></select>
+                <div class="category-row">
+                    <select id="transactionCategory" required></select>
+                    <button type="button" class="icon-button" data-new-category="transactionCategory" data-category-type="transaction" title="Nova categoria">+</button>
+                    <button type="button" class="icon-button" data-manage-category="transactionCategory" data-category-type="transaction" title="Gerenciar categorias">⚙️</button>
+                </div>
 
                 <label for="transactionAmount">Valor (R$)</label>
                 <input id="transactionAmount" type="number" min="0.01" step="0.01" required>
@@ -573,22 +584,24 @@
         </div>
     </div>
 
-    <div id="categoriesMenuModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
-        <div class="modal-card" style="max-width:560px">
-            <h3>Categorias</h3>
-            <p class="helper">Gerencie as categorias de cada tipo de lançamento.</p>
+    <div id="newCategoryModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <h3>Nova categoria</h3>
+            <p class="helper" id="newCategoryTypeLabel"></p>
 
-            <div class="recurring-tabs">
-                <button id="openIncomeCategories" class="primary-button" type="button">Entrada</button>
-                <button id="openCreditCategories" class="primary-button" type="button">Crédito</button>
-                <button id="openDebitCategories" class="primary-button" type="button">Débito</button>
-            </div>
+            <form id="newCategoryForm">
+                <label for="newCategoryName">Nome</label>
+                <input id="newCategoryName" type="text" required maxlength="40" placeholder="Ex: Alimentação">
 
-            <div class="modal-actions">
-                <button id="closeCategoriesMenu" class="cancel-button" type="button">
-                    Fechar
-                </button>
-            </div>
+                <div class="form-buttons">
+                    <button type="submit" class="primary-button">
+                        Criar categoria
+                    </button>
+                    <button type="button" class="cancel-button" id="closeNewCategoryModal">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -599,26 +612,7 @@
 
             <div id="categoriesListContainer"></div>
 
-            <div id="categoryFormContainer" class="hidden">
-                <form id="categoryForm" style="margin-top:16px">
-                    <label for="categoryName">Nome</label>
-                    <input id="categoryName" type="text" required maxlength="40" placeholder="Ex: Alimentação">
-
-                    <div class="form-buttons">
-                        <button type="submit" class="primary-button">
-                            Salvar categoria
-                        </button>
-                        <button type="button" class="cancel-button" id="closeCategoryForm">
-                            Cancelar
-                        </button>
-                    </div>
-                </form>
-            </div>
-
             <div class="modal-actions">
-                <button id="openCategoryForm" class="primary-button" type="button">
-                    + Nova
-                </button>
                 <button id="closeCategoriesListModal" class="cancel-button" type="button">
                     Fechar
                 </button>
