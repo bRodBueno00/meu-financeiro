@@ -89,14 +89,30 @@ main {
     margin-bottom: 15px;
 }
 
-.balance-card > span {
+.balance-main {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+
+.balance-main > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.balance-main > div > span {
     font-size: 13px;
     opacity: .9;
 }
 
-.balance-card h2 {
-    font-size: 30px;
-    margin: 12px 0 23px;
+.balance-main h2 {
+    font-size: 24px;
+    overflow-wrap: anywhere;
 }
 
 .balance-details {
