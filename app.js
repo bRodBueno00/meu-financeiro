@@ -34,6 +34,7 @@ let editingRecurringId = null;
 let currentRecurringType = "income";
 
 let transactionsSectionOpen = false;
+let calendarSectionOpen = false;
 
 const $ = id => document.getElementById(id);
 
@@ -1981,14 +1982,24 @@ $("goToCurrentMonth").addEventListener("click", () => {
 });
 
 // ==========================================
-// EXPANDIR/RECOLHER LANÇAMENTOS DO MÊS
+// EXPANDIR/RECOLHER SEÇÕES
 // ==========================================
+
+function setCalendarSectionOpen(open) {
+    calendarSectionOpen = open;
+    $("calendarSection").classList.toggle("hidden", !open);
+    $("toggleCalendarIcon").textContent = open ? "▾" : "▸";
+}
 
 function setTransactionsSectionOpen(open) {
     transactionsSectionOpen = open;
     $("transactionsSection").classList.toggle("hidden", !open);
     $("toggleTransactionsIcon").textContent = open ? "▾" : "▸";
 }
+
+$("toggleCalendarButton").addEventListener("click", () => {
+    setCalendarSectionOpen(!calendarSectionOpen);
+});
 
 $("toggleTransactionsButton").addEventListener("click", () => {
     setTransactionsSectionOpen(!transactionsSectionOpen);
@@ -2287,5 +2298,6 @@ populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
 
 updateDashboard();
 updateCloudButtons();
+setCalendarSectionOpen(false);
 setTransactionsSectionOpen(false);
 initGoogleAuth();
