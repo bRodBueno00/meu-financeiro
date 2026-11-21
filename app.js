@@ -32,6 +32,7 @@ let pendingTransactionDate = null;
 let editingRecurringId = null;
 
 let currentRecurringType = "income";
+let currentTransactionsType = "income";
 
 let transactionsSectionOpen = false;
 let calendarSectionOpen = false;
@@ -1504,6 +1505,242 @@ function renderTransactions(items) {
 }
 
 // ==========================================
+// MENU DE LANÇAMENTOS DO MÊS
+// ==========================================
+
+function openTransactionsMenu() {
+    $("transactionsMenu").classList.remove("hidden");
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
+    $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+}
+
+function closeTransactionsMenu() {
+    $("transactionsMenu").classList.add("hidden");
+}
+
+function openTransactionsList(type) {
+    currentTransactionsType = type;
+
+    const labels = {
+        income: "Entradas do mês",
+        credit: "Saídas no crédito do mês",
+        debit: "Saídas no débito do mês"
+    };
+
+    $("transactionsListTitle").textContent = labels[type];
+
+    const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric"
+    });
+    $("transactionsListMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+
+    $("transactionFormContainer").classList.add("hidden");
+    $("transactionsListModal").classList.remove("hidden");
+
+    renderTransactionsList();
+}
+
+function closeTransactionsListModal() {
+    $("transactionsListModal").classList.add("hidden");
+    $("transactionFormContainer").classList.add("hidden");
+}
+
+function renderTransactionsList() {
+    const container = $("transactionsListContainer");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const monthTransactions = transactions.filter(item =>
+        item.date.startsWith(monthKey(selectedDate)) &&
+        item.type === currentTransactionsType
+    );
+
+    if (monthTransactions.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty-message";
+        empty.textContent = "Nenhum lançamento válido para este mês.";
+        container.appendChild(empty);
+        return;
+    }
+
+    monthTransactions
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .forEach(item => {
+            const row = document.createElement("div");
+            row.className = "planning-item";
+
+            const info = document.createElement("div");
+            info.className = "item-info";
+
+            const name = document.createElement("strong");
+            name.textContent = item.description;
+
+            const details = document.createElement("small");
+            let detailText = formatDate(item.date);
+            if (item.installmentGroupId && item.installmentNumber && item.installmentTotal) {
+                detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
+            }
+            details.textContent = detailText;
+
+            info.append(name, details);
+
+            const actions = document.createElement("div");
+            actions.className = "item-actions";
+
+            const value = document.createElement("span");
+            value.className = "item-value " +
+                (item.type === "income" ? "green" :
+                 item.type === "credit" ? "blue" : "red");
+            value.textContent =
+                `${item.type === "income" ? "+" : "-"} ${money(item.amount)}`;
+
+            const editBtn = document.createElement("button");
+            editBtn.className = "outline-button";
+            editBtn.textContent = "Editar";
+            editBtn.addEventListener("click", () => {
+                editTransaction(item);
+                renderTransactionsList();
+            });
+
+            const remove = document.createElement("button");
+            remove.className = "delete-button";
+            remove.textContent = "✕";
+            remove.title = "Excluir lançamento";
+
+            remove.addEventListener("click", () => {
+                if (item.installmentGroupId) {
+                    if (!confirm("Este lançamento faz parte de uma compra parcelada. Excluir todas as parcelas?")) {
+                        return;
+                    }
+                    transactions = transactions.filter(x => x.installmentGroupId !== item.installmentGroupId);
+                } else {
+                    if (!confirm("Excluir este lançamento?")) return;
+                    transactions = transactions.filter(x => x.id !== item.id);
+                }
+
+                saveData();
+                updateDashboard();
+                renderTransactionsList();
+            });
+
+            actions.append(value, editBtn, remove);
+            row.append(info, actions);
+            container.appendChild(row);
+        });
+}
+
+// ==========================================
+// FORMULÁRIO DO MENU DE LANÇAMENTOS DO MÊS
+// ==========================================
+
+function openStandaloneTransactionForm() {
+    $("transactionFormContainer").classList.remove("hidden");
+    $("standaloneTransactionForm").reset();
+
+    $("standaloneDate").value = suggestedDateInSelectedMonth();
+    $("standaloneType").value = currentTransactionsType;
+    $("standaloneInstallments").value = "1";
+
+    updateStandaloneInstallmentVisibility();
+    populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
+}
+
+function updateStandaloneInstallmentVisibility() {
+    const type = $("standaloneType").value;
+    const container = $("standaloneInstallmentContainer");
+
+    if (type === "credit") {
+        container.classList.remove("hidden");
+    } else {
+        container.classList.add("hidden");
+        $("standaloneInstallments").value = "1";
+    }
+}
+
+$("standaloneType").addEventListener("change", updateStandaloneInstallmentVisibility);
+
+$("closeStandaloneForm").addEventListener("click", () => {
+    $("transactionFormContainer").classList.add("hidden");
+});
+
+$("standaloneTransactionForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const description = $("standaloneDescription").value.trim();
+    const totalAmount = Number($("standaloneAmount").value);
+    const type = $("standaloneType").value;
+    const date = $("standaloneDate").value;
+    const installments = type === "credit"
+        ? Number($("standaloneInstallments").value)
+        : 1;
+
+    if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
+        alert("Preencha os dados corretamente.");
+        return;
+    }
+
+    registerDescription(description);
+
+    if (type === "credit" && installments > 1) {
+        const baseDate = parseDate(date);
+        const installmentAmount = Math.round((totalAmount / installments) * 100) / 100;
+        const groupId = makeId();
+
+        let accumulated = 0;
+
+        for (let i = 0; i < installments; i++) {
+            const installmentDate = new Date(
+                baseDate.getFullYear(),
+                baseDate.getMonth() + i,
+                baseDate.getDate(),
+                12
+            );
+
+            const isLast = i === installments - 1;
+            const amount = isLast
+                ? Math.round((totalAmount - accumulated) * 100) / 100
+                : installmentAmount;
+
+            accumulated += amount;
+
+            transactions.push({
+                id: makeId(),
+                description: `${description} (${i + 1}/${installments})`,
+                amount,
+                type: "credit",
+                date: localDate(installmentDate),
+                installmentGroupId: groupId,
+                installmentNumber: i + 1,
+                installmentTotal: installments,
+                originalDescription: description
+            });
+        }
+    } else {
+        transactions.push({
+            id: makeId(),
+            description,
+            amount: Math.round(totalAmount * 100) / 100,
+            type,
+            date
+        });
+    }
+
+    rebuildSavedDescriptions();
+
+    saveData();
+    updateDashboard();
+
+    $("standaloneTransactionForm").reset();
+    $("transactionFormContainer").classList.add("hidden");
+    renderTransactionsList();
+});
+
+// ==========================================
 // MENU DE LANÇAMENTOS RECORRENTES
 // ==========================================
 
@@ -1913,6 +2150,31 @@ $("recurringForm").addEventListener("submit", event => {
 });
 
 // ==========================================
+// MENU DE LANÇAMENTOS DO MÊS (EVENTOS)
+// ==========================================
+
+$("openTransactionsMenu").addEventListener("click", openTransactionsMenu);
+$("closeTransactionsMenu").addEventListener("click", closeTransactionsMenu);
+
+$("openIncomeTransactions").addEventListener("click", () => openTransactionsList("income"));
+$("openCreditTransactions").addEventListener("click", () => openTransactionsList("credit"));
+$("openDebitTransactions").addEventListener("click", () => openTransactionsList("debit"));
+
+$("openTransactionForm").addEventListener("click", () => {
+    openStandaloneTransactionForm();
+});
+
+$("closeTransactionsListModal").addEventListener("click", closeTransactionsListModal);
+
+$("transactionsListModal").addEventListener("click", event => {
+    if (event.target === $("transactionsListModal")) closeTransactionsListModal();
+});
+
+$("transactionsMenu").addEventListener("click", event => {
+    if (event.target === $("transactionsMenu")) closeTransactionsMenu();
+});
+
+// ==========================================
 // NAVEGAÇÃO ENTRE MESES
 // ==========================================
 
@@ -1950,6 +2212,27 @@ function navigateMonth(offset) {
         });
         $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
     }
+
+    if ($("transactionsListModal") && !$("transactionsListModal").classList.contains("hidden")) {
+        try {
+            renderTransactionsList();
+            const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+                month: "long",
+                year: "numeric"
+            });
+            $("transactionsListMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+        } catch (e) {
+            console.error("Erro ao atualizar lista de lançamentos:", e);
+        }
+    }
+
+    if ($("transactionsMenu") && !$("transactionsMenu").classList.contains("hidden")) {
+        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric"
+        });
+        $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
+    }
 }
 
 $("prevMonth").addEventListener("click", () => navigateMonth(-1));
@@ -1979,6 +2262,22 @@ $("goToCurrentMonth").addEventListener("click", () => {
             year: "numeric"
         });
         $("recurringMonthLabel").textContent = `Válidos em ${monthLabel}`;
+    }
+
+    if ($("transactionsListModal") && !$("transactionsListModal").classList.contains("hidden")) {
+        try {
+            renderTransactionsList();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    if ($("transactionsMenu") && !$("transactionsMenu").classList.contains("hidden")) {
+        const monthLabel = selectedDate.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric"
+        });
+        $("transactionsMonthLabel").textContent = `Lançamentos de ${monthLabel}`;
     }
 });
 
@@ -2071,6 +2370,9 @@ function confirmSelectedDeletion() {
         $("recurringMenu").classList.add("hidden");
         $("recurringListModal").classList.add("hidden");
         $("recurringFormContainer").classList.add("hidden");
+        $("transactionsMenu").classList.add("hidden");
+        $("transactionsListModal").classList.add("hidden");
+        $("transactionFormContainer").classList.add("hidden");
 
         selectedDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12);
     } else {
@@ -2295,11 +2597,13 @@ $("syncNowButton").addEventListener("click", async () => {
 attachDatalist("transactionDescription", "transactionDescriptionList");
 attachDatalist("recurringDescription", "recurringDescriptionList");
 attachDatalist("recurringEditDescription", "recurringEditDescriptionList");
+attachDatalist("standaloneDescription", "standaloneDescriptionList");
 
 loadData();
 
 populateDescriptionOptions("transactionDescription", "transactionDescriptionList");
 populateDescriptionOptions("recurringDescription", "recurringDescriptionList");
+populateDescriptionOptions("standaloneDescription", "standaloneDescriptionList");
 
 updateDashboard();
 updateCloudButtons();
