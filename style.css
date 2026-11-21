@@ -252,7 +252,7 @@ select:focus {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 #planningForm {
@@ -570,7 +570,7 @@ footer {
 }
 
 .modal-overlay.hidden {
-    display: none;
+    display: none !important;
 }
 
 .modal-card {
