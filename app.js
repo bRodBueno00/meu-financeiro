@@ -1643,7 +1643,6 @@ function openStandaloneTransactionForm() {
     $("standaloneTransactionForm").reset();
 
     $("standaloneDate").value = suggestedDateInSelectedMonth();
-    $("standaloneType").value = currentTransactionsType;
     $("standaloneInstallments").value = "1";
 
     updateStandaloneInstallmentVisibility();
@@ -1651,18 +1650,15 @@ function openStandaloneTransactionForm() {
 }
 
 function updateStandaloneInstallmentVisibility() {
-    const type = $("standaloneType").value;
     const container = $("standaloneInstallmentContainer");
 
-    if (type === "credit") {
+    if (currentTransactionsType === "credit") {
         container.classList.remove("hidden");
     } else {
         container.classList.add("hidden");
         $("standaloneInstallments").value = "1";
     }
 }
-
-$("standaloneType").addEventListener("change", updateStandaloneInstallmentVisibility);
 
 $("closeStandaloneForm").addEventListener("click", () => {
     $("transactionFormContainer").classList.add("hidden");
@@ -1673,7 +1669,7 @@ $("standaloneTransactionForm").addEventListener("submit", event => {
 
     const description = $("standaloneDescription").value.trim();
     const totalAmount = Number($("standaloneAmount").value);
-    const type = $("standaloneType").value;
+    const type = currentTransactionsType;
     const date = $("standaloneDate").value;
     const installments = type === "credit"
         ? Number($("standaloneInstallments").value)
