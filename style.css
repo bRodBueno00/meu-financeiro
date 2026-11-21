@@ -132,10 +132,16 @@ main {
     opacity: .8;
 }
 
-.action-buttons {
+.action-section h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    color: #1e293b;
+}
+
+.action-row {
     display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
-    margin-bottom: 16px;
 }
 
 .section {
