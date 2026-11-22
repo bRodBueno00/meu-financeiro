@@ -169,7 +169,7 @@
                 <div class="reset-section" style="margin-top:16px">
                     <h3>Zerar aplicativo</h3>
                     <p class="helper">
-                        Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste aparelho.
+                        Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste aparelho. No modo "todos os dados", as categorias personalizadas também são removidas.
                     </p>
 
                     <button id="resetAppButton" class="danger-button" type="button">
@@ -790,11 +790,26 @@
     <div id="newCategoryModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
         <div class="modal-card">
             <h3>Nova categoria</h3>
-            <p class="helper" id="newCategoryTypeLabel"></p>
+            <p class="helper">Marque em quais tipos de lançamento ela pode aparecer.</p>
 
             <form id="newCategoryForm">
                 <label for="newCategoryName">Nome</label>
                 <input id="newCategoryName" type="text" required maxlength="40" placeholder="Ex: Alimentação">
+
+                <p class="modal-instruction">Tipos de lançamento</p>
+
+                <label class="checkbox-option">
+                    <input id="newCategoryType_income" type="checkbox">
+                    <span>Entrada</span>
+                </label>
+                <label class="checkbox-option">
+                    <input id="newCategoryType_credit" type="checkbox">
+                    <span>Crédito</span>
+                </label>
+                <label class="checkbox-option">
+                    <input id="newCategoryType_debit" type="checkbox">
+                    <span>Débito</span>
+                </label>
 
                 <div class="form-buttons">
                     <button type="submit" class="primary-button">
@@ -811,7 +826,7 @@
     <div id="categoriesListModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="categoriesListTitle">
         <div class="modal-card" style="max-width:560px">
             <h3 id="categoriesListTitle">Categorias</h3>
-            <p class="helper" id="categoriesListTypeLabel"></p>
+            <p class="helper">Lista universal, usada em todos os tipos de lançamento. Editar aqui altera em todos os lugares.</p>
 
             <div id="categoriesListContainer"></div>
 
@@ -830,6 +845,21 @@
             <form id="categoryEditForm">
                 <label for="categoryEditName">Nome</label>
                 <input id="categoryEditName" type="text" required maxlength="40">
+
+                <p class="modal-instruction">Tipos de lançamento</p>
+
+                <label class="checkbox-option">
+                    <input id="categoryEditType_income" type="checkbox">
+                    <span>Entrada</span>
+                </label>
+                <label class="checkbox-option">
+                    <input id="categoryEditType_credit" type="checkbox">
+                    <span>Crédito</span>
+                </label>
+                <label class="checkbox-option">
+                    <input id="categoryEditType_debit" type="checkbox">
+                    <span>Débito</span>
+                </label>
 
                 <div class="form-buttons">
                     <button type="submit" class="primary-button">
