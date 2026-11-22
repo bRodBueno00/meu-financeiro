@@ -23,7 +23,9 @@ let invoiceSettings = {};
 let recurringMonthOverrides = {};
 let savedDescriptions = [];
 
-let categories = { income: [], credit: [], debit: [] };
+// ===== CATEGORIAS (LISTA ÚNICA) =====
+// categories = [{ id, name, color, types: ["income","credit","debit"] }]
+let categories = [];
 let nextCategoryColorIndex = 0;
 
 let pendingTransactionType = null;
@@ -33,7 +35,7 @@ let editingRecurringId = null;
 
 let currentRecurringType = "income";
 let currentTransactionsType = "income";
-let currentCategoriesType = "income";
+
 let editingCategoryId = null;
 
 let pendingCategoryTarget = null;
@@ -117,16 +119,27 @@ function safeOn(id, event, handler) {
 }
 
 // ==========================================
-// CATEGORIAS
+// CATEGORIAS — LISTA ÚNICA COM FLAG types
 // ==========================================
 
+const ALL_TYPES = ["income", "credit", "debit"];
+const TYPE_LABELS = { income: "Entrada", credit: "Crédito", debit: "Débito" };
+
 function ensureOthersCategory() {
-    ["income", "credit", "debit"].forEach(type => {
-        if (!Array.isArray(categories[type])) categories[type] = [];
-        if (!categories[type].some(c => c.id === OUTROS_ID)) {
-            categories[type].unshift({ id: OUTROS_ID, name: "Outros", color: "#64748b" });
-        }
-    });
+    if (!Array.isArray(categories)) categories = [];
+    const existing = categories.find(c => c.id === OUTROS_ID);
+    if (!existing) {
+        categories.unshift({
+            id: OUTROS_ID,
+            name: "Outros",
+            color: "#64748b",
+            types: [...ALL_TYPES]
+        });
+    } else {
+        existing.types = [...ALL_TYPES];
+        existing.name = "Outros";
+        existing.color = "#64748b";
+    }
 }
 
 function nextColor() {
@@ -135,27 +148,39 @@ function nextColor() {
     return color;
 }
 
-function getCategoryById(type, id) {
-    if (!categories[type]) return null;
-    return categories[type].find(c => c.id === id) || null;
+function getCategoryById(id) {
+    if (!id) return null;
+    return categories.find(c => c.id === id) || null;
 }
 
-function getCategoryName(type, id) {
+function getCategoryName(id) {
     if (!id) return "Outros";
-    const cat = getCategoryById(type, id);
+    const cat = getCategoryById(id);
     return cat ? cat.name : "Outros";
 }
 
-function getCategoryColor(type, id) {
+function getCategoryColor(id) {
     if (!id) return "#64748b";
-    const cat = getCategoryById(type, id);
+    const cat = getCategoryById(id);
     return cat ? cat.color : "#64748b";
 }
 
-function normalizeCategoryId(type, id) {
+function categorySupportsType(id, type) {
+    const cat = getCategoryById(id);
+    if (!cat) return id === OUTROS_ID;
+    return Array.isArray(cat.types) && cat.types.includes(type);
+}
+
+function categoriesForType(type) {
+    return categories.filter(c => Array.isArray(c.types) && c.types.includes(type));
+}
+
+function normalizeCategoryId(id, type) {
     if (!id) return OUTROS_ID;
-    if (getCategoryById(type, id)) return id;
-    return OUTROS_ID;
+    const cat = getCategoryById(id);
+    if (!cat) return OUTROS_ID;
+    if (type && !cat.types.includes(type)) return OUTROS_ID;
+    return cat.id;
 }
 
 function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
@@ -164,7 +189,7 @@ function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
 
     select.innerHTML = "";
 
-    const list = categories[type] || [];
+    const list = categoriesForType(type);
 
     list.forEach(cat => {
         const opt = document.createElement("option");
@@ -173,13 +198,13 @@ function populateCategorySelect(selectId, type, selectedId = OUTROS_ID) {
         select.appendChild(opt);
     });
 
-    select.value = normalizeCategoryId(type, selectedId);
+    select.value = normalizeCategoryId(selectedId, type);
 }
 
 function resolveCategoryType(buttonType, targetSelectId) {
     if (targetSelectId === "transactionCategory") {
         const typeEl = $("transactionType");
-        return typeEl ? typeEl.value : currentCategoriesType;
+        return typeEl ? typeEl.value : "income";
     }
     if (targetSelectId === "standaloneCategory") return currentTransactionsType;
     if (targetSelectId === "recurringCategory") return currentRecurringType;
@@ -190,21 +215,22 @@ function resolveCategoryType(buttonType, targetSelectId) {
         }
         return currentRecurringType;
     }
-    return currentCategoriesType;
+    return "income";
 }
 
-function openNewCategoryModal(targetSelectId, buttonType) {
-    pendingCategoryTarget = {
-        selectId: targetSelectId,
-        type: resolveCategoryType(buttonType, targetSelectId)
-    };
+// ---- Modal de nova categoria (com checkboxes por tipo) ----
 
-    const labels = { income: "Entrada", credit: "Crédito", debit: "Débito" };
-    const labelEl = $("newCategoryTypeLabel");
-    if (labelEl) labelEl.textContent = `Tipo: ${labels[pendingCategoryTarget.type] || ""}`;
+function openNewCategoryModal(targetSelectId, buttonType) {
+    const currentType = resolveCategoryType(buttonType, targetSelectId);
+    pendingCategoryTarget = { selectId: targetSelectId, currentType };
 
     const form = $("newCategoryForm");
     if (form) form.reset();
+
+    ALL_TYPES.forEach(t => {
+        const cb = $(`newCategoryType_${t}`);
+        if (cb) cb.checked = (t === currentType);
+    });
 
     const modal = $("newCategoryModal");
     if (modal) modal.classList.remove("hidden");
@@ -233,43 +259,45 @@ safeOn("newCategoryForm", "submit", event => {
     const name = nameInput ? nameInput.value.trim() : "";
     if (!name) return;
 
-    const type = pendingCategoryTarget.type;
-    const exists = categories[type].some(
-        c => c.name.toLowerCase() === name.toLowerCase()
-    );
+    const selectedTypes = ALL_TYPES.filter(t => {
+        const cb = $(`newCategoryType_${t}`);
+        return cb && cb.checked;
+    });
 
-    if (exists) {
-        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+    if (selectedTypes.length === 0) {
+        alert("Selecione pelo menos um tipo para a categoria.");
         return;
     }
 
-    const newCat = { id: makeId(), name, color: nextColor() };
-    categories[type].push(newCat);
+    const exists = categories.some(
+        c => c.name.toLowerCase() === name.toLowerCase()
+    );
+    if (exists) {
+        alert("Já existe uma categoria com esse nome.");
+        return;
+    }
+
+    const newCat = { id: makeId(), name, color: nextColor(), types: selectedTypes };
+    categories.push(newCat);
 
     saveData();
-    populateCategorySelect(pendingCategoryTarget.selectId, type, newCat.id);
+
+    const targetType = pendingCategoryTarget.currentType;
+    if (newCat.types.includes(targetType)) {
+        populateCategorySelect(pendingCategoryTarget.selectId, targetType, newCat.id);
+    } else {
+        populateCategorySelect(pendingCategoryTarget.selectId, targetType);
+    }
+
     closeNewCategoryModal();
     renderFiltersDropdown();
 });
 
-function openCategoriesListForType(type) {
-    currentCategoriesType = type;
+// ---- Modal de gestão de categorias (lista única) ----
 
-    const labels = {
-        income: "Categorias de entrada",
-        credit: "Categorias de saída no crédito",
-        debit: "Categorias de saída no débito"
-    };
-
-    const title = $("categoriesListTitle");
-    if (title) title.textContent = labels[type] || "Categorias";
-
-    const typeLabel = $("categoriesListTypeLabel");
-    if (typeLabel) typeLabel.textContent = "Categorias atuais:";
-
+function openCategoriesList() {
     const modal = $("categoriesListModal");
     if (modal) modal.classList.remove("hidden");
-
     renderCategoriesList();
 }
 
@@ -284,9 +312,13 @@ function renderCategoriesList() {
 
     container.innerHTML = "";
 
-    const list = categories[currentCategoriesType] || [];
+    const sorted = [...categories].sort((a, b) => {
+        if (a.id === OUTROS_ID) return -1;
+        if (b.id === OUTROS_ID) return 1;
+        return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
+    });
 
-    list.forEach(cat => {
+    sorted.forEach(cat => {
         const row = document.createElement("div");
         row.className = "planning-item";
 
@@ -308,11 +340,14 @@ function renderCategoriesList() {
         nameWrap.append(dot, name);
         info.appendChild(nameWrap);
 
+        const details = document.createElement("small");
         if (cat.id === OUTROS_ID) {
-            const details = document.createElement("small");
-            details.textContent = "Categoria padrão (não editável)";
-            info.appendChild(details);
+            details.textContent = "Categoria padrão universal (não editável)";
+        } else {
+            const typesLabel = cat.types.map(t => TYPE_LABELS[t]).join(" • ");
+            details.textContent = typesLabel || "Nenhum tipo";
         }
+        info.appendChild(details);
 
         const actions = document.createElement("div");
         actions.className = "item-actions";
@@ -341,6 +376,12 @@ function openCategoryEditModal(cat) {
     editingCategoryId = cat.id;
     const input = $("categoryEditName");
     if (input) input.value = cat.name;
+
+    ALL_TYPES.forEach(t => {
+        const cb = $(`categoryEditType_${t}`);
+        if (cb) cb.checked = cat.types.includes(t);
+    });
+
     const modal = $("categoryEditModal");
     if (modal) modal.classList.remove("hidden");
 }
@@ -352,25 +393,19 @@ function closeCategoryEditModal() {
 }
 
 function deleteCategory(cat) {
-    const type = currentCategoriesType;
-
-    const inUse = transactions.some(t => t.type === type && t.categoryId === cat.id)
-        || recurring.some(r => r.type === type && r.categoryId === cat.id);
+    const inUse = transactions.some(t => t.categoryId === cat.id)
+        || recurring.some(r => r.categoryId === cat.id);
 
     if (inUse) {
         if (!confirm(`A categoria "${cat.name}" está em uso. Os lançamentos serão movidos para "Outros". Continuar?`)) return;
 
-        transactions.forEach(t => {
-            if (t.type === type && t.categoryId === cat.id) t.categoryId = OUTROS_ID;
-        });
-        recurring.forEach(r => {
-            if (r.type === type && r.categoryId === cat.id) r.categoryId = OUTROS_ID;
-        });
+        transactions.forEach(t => { if (t.categoryId === cat.id) t.categoryId = OUTROS_ID; });
+        recurring.forEach(r => { if (r.categoryId === cat.id) r.categoryId = OUTROS_ID; });
     } else {
         if (!confirm(`Excluir a categoria "${cat.name}"?`)) return;
     }
 
-    categories[type] = categories[type].filter(c => c.id !== cat.id);
+    categories = categories.filter(c => c.id !== cat.id);
     chartFilters.categoryKeys.delete(cat.id);
 
     saveData();
@@ -399,18 +434,29 @@ safeOn("categoryEditForm", "submit", event => {
     const newName = input ? input.value.trim() : "";
     if (!newName) return;
 
-    const type = currentCategoriesType;
-    const exists = categories[type].some(
-        c => c.id !== editingCategoryId && c.name.toLowerCase() === newName.toLowerCase()
-    );
+    const selectedTypes = ALL_TYPES.filter(t => {
+        const cb = $(`categoryEditType_${t}`);
+        return cb && cb.checked;
+    });
 
-    if (exists) {
-        alert("Já existe uma categoria com esse nome para este tipo de lançamento.");
+    if (selectedTypes.length === 0) {
+        alert("Selecione pelo menos um tipo para a categoria.");
         return;
     }
 
-    const cat = categories[type].find(c => c.id === editingCategoryId);
-    if (cat) cat.name = newName;
+    const exists = categories.some(
+        c => c.id !== editingCategoryId && c.name.toLowerCase() === newName.toLowerCase()
+    );
+    if (exists) {
+        alert("Já existe uma categoria com esse nome.");
+        return;
+    }
+
+    const cat = categories.find(c => c.id === editingCategoryId);
+    if (cat) {
+        cat.name = newName;
+        cat.types = selectedTypes;
+    }
 
     saveData();
     updatePainel();
@@ -431,12 +477,7 @@ document.addEventListener("click", event => {
 
     const manageBtn = event.target.closest("[data-manage-category]");
     if (manageBtn) {
-        const targetId = manageBtn.getAttribute("data-manage-category");
-        const type = resolveCategoryType(
-            manageBtn.getAttribute("data-category-type"),
-            targetId
-        );
-        openCategoriesListForType(type);
+        openCategoriesList();
     }
 });
 
@@ -446,7 +487,7 @@ document.addEventListener("click", event => {
 
 function getDataSnapshot() {
     return {
-        version: 18,
+        version: 19,
         transactions,
         initialBalances,
         invoiceSettings,
@@ -490,6 +531,73 @@ function rebuildSavedDescriptions() {
     );
 }
 
+// ---- Migração de categorias antigas para lista única ----
+
+function migrateCategories(data) {
+    // Já é lista (novo formato)
+    if (Array.isArray(data.categories)) {
+        return data.categories.map(c => ({
+            id: c.id || makeId(),
+            name: c.name || "Sem nome",
+            color: c.color || nextColor(),
+            types: Array.isArray(c.types) && c.types.length ? c.types.slice() : [...ALL_TYPES]
+        }));
+    }
+
+    // Formato antigo { income:[], credit:[], debit:[] }
+    if (data.categories && typeof data.categories === "object") {
+        const merged = new Map();
+        const order = [];
+
+        ALL_TYPES.forEach(type => {
+            const arr = Array.isArray(data.categories[type]) ? data.categories[type] : [];
+            arr.forEach(c => {
+                const key = (c.name || "").trim().toLowerCase();
+                if (!key) return;
+                if (!merged.has(key)) {
+                    merged.set(key, {
+                        id: c.id || makeId(),
+                        name: c.name,
+                        color: c.color || nextColor(),
+                        types: []
+                    });
+                    order.push(key);
+                }
+                const entry = merged.get(key);
+                if (!entry.types.includes(type)) entry.types.push(type);
+            });
+        });
+
+        const list = order.map(k => merged.get(k));
+
+        // Unifica "Outros" — mantém um só com id OUTROS_ID
+        const outrosEntries = list.filter(c => c.name.toLowerCase() === "outros");
+        if (outrosEntries.length > 0) {
+            outrosEntries[0].id = OUTROS_ID;
+            outrosEntries[0].name = "Outros";
+            outrosEntries[0].color = "#64748b";
+            outrosEntries[0].types = [...ALL_TYPES];
+            // remove duplicatas de "outros"
+            const othersId = OUTROS_ID;
+            const seen = new Set();
+            for (let i = list.length - 1; i >= 0; i--) {
+                if (list[i].name.toLowerCase() === "outros") {
+                    if (seen.has(othersId)) {
+                        // mescla ids? na migração antiga os "outros" tinham o mesmo id "outros"
+                        list.splice(i, 1);
+                    } else {
+                        seen.add(othersId);
+                    }
+                }
+            }
+        }
+
+        return list;
+    }
+
+    return [];
+}
+
 function applyDataSnapshot(data) {
     transactions = (data.transactions || []).map(item => ({
         ...item,
@@ -500,20 +608,11 @@ function applyDataSnapshot(data) {
     initialBalances = data.initialBalances || {};
     invoiceSettings = data.invoiceSettings || {};
     recurringMonthOverrides = data.recurringMonthOverrides || {};
-
     savedDescriptions = Array.isArray(data.savedDescriptions) ? data.savedDescriptions.slice() : [];
 
-    if (data.categories && typeof data.categories === "object") {
-        categories = {
-            income: Array.isArray(data.categories.income) ? data.categories.income.map(c => ({ ...c })) : [],
-            credit: Array.isArray(data.categories.credit) ? data.categories.credit.map(c => ({ ...c })) : [],
-            debit: Array.isArray(data.categories.debit) ? data.categories.debit.map(c => ({ ...c })) : []
-        };
-    } else {
-        categories = { income: [], credit: [], debit: [] };
-    }
-
+    categories = migrateCategories(data);
     nextCategoryColorIndex = Number.isInteger(data.nextCategoryColorIndex) ? data.nextCategoryColorIndex : 0;
+
     ensureOthersCategory();
 
     if (Array.isArray(data.recurring)) {
@@ -581,6 +680,7 @@ function loadData() {
         rebuildSavedDescriptions();
     } catch (error) {
         console.error("Erro ao carregar dados:", error);
+        ensureOthersCategory();
     }
 }
 
@@ -1235,15 +1335,15 @@ function getFilteredExpenseEntries(range) {
                 if (t.type !== "debit") return;
                 if (!t.date.startsWith(key)) return;
                 if (!transactionPassesFilter(t.amount)) return;
-                const cid = normalizeCategoryId("debit", t.categoryId);
+                const cid = normalizeCategoryId(t.categoryId, "debit");
                 if (!categoryPassesFilter(cid)) return;
 
                 entries.push({
                     monthKey: key,
                     amount: t.amount,
                     categoryId: cid,
-                    categoryName: getCategoryName("debit", cid),
-                    categoryColor: getCategoryColor("debit", cid),
+                    categoryName: getCategoryName(cid),
+                    categoryColor: getCategoryColor(cid),
                     description: t.description || "Sem descrição",
                     recurring: false
                 });
@@ -1254,15 +1354,15 @@ function getFilteredExpenseEntries(range) {
             getOccurrencesForMonth(monthDate).forEach(r => {
                 if (r.type !== "debit") return;
                 if (!transactionPassesFilter(r.amount)) return;
-                const cid = normalizeCategoryId("debit", r.categoryId);
+                const cid = normalizeCategoryId(r.categoryId, "debit");
                 if (!categoryPassesFilter(cid)) return;
 
                 entries.push({
                     monthKey: key,
                     amount: r.amount,
                     categoryId: cid,
-                    categoryName: getCategoryName("debit", cid),
-                    categoryColor: getCategoryColor("debit", cid),
+                    categoryName: getCategoryName(cid),
+                    categoryColor: getCategoryColor(cid),
                     description: r.description || "Sem descrição",
                     recurring: true
                 });
@@ -1529,11 +1629,11 @@ function bindDashShortcuts() {
 
 function getAvailableFilterCategories() {
     const list = [];
-    ["debit", "credit"].forEach(type => {
-        (categories[type] || []).forEach(cat => {
-            if (cat.id === OUTROS_ID) return;
-            list.push({ type, id: cat.id, name: cat.name, color: cat.color });
-        });
+    categories.forEach(cat => {
+        if (cat.id === OUTROS_ID) return;
+        const types = (cat.types || []).filter(t => t === "debit" || t === "credit");
+        if (types.length === 0) return;
+        list.push({ id: cat.id, name: cat.name, color: cat.color, types });
     });
     return list;
 }
@@ -1557,7 +1657,7 @@ function renderFiltersDropdown() {
     const groups = { debit: "Débito", credit: "Crédito" };
 
     Object.keys(groups).forEach(type => {
-        const groupItems = list.filter(c => c.type === type);
+        const groupItems = list.filter(c => c.types.includes(type));
         if (groupItems.length === 0) return;
 
         const title = document.createElement("div");
@@ -2336,7 +2436,7 @@ function openDayTransactionsModal(date, type) {
             name.textContent = item.description || labels[item.type];
 
             const details = document.createElement("small");
-            const catName = getCategoryName(item.type, item.categoryId);
+            const catName = getCategoryName(item.categoryId);
             details.textContent = item.occurrenceDate
                 ? `${labels[item.type]} • ${catName} • Recorrente`
                 : `${labels[item.type]} • ${catName}`;
@@ -2548,7 +2648,7 @@ safeOn("transactionForm", "submit", event => {
     const type = $("transactionType").value;
     const date = $("transactionDate").value;
     const installments = type === "credit" ? Number($("transactionInstallments").value) : 1;
-    const categoryId = normalizeCategoryId(type, $("transactionCategory").value);
+    const categoryId = normalizeCategoryId($("transactionCategory").value, type);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
         alert("Preencha os dados corretamente.");
@@ -2676,7 +2776,7 @@ function renderTransactionsList() {
 
         const details = document.createElement("small");
         let detailText = formatDate(item.date);
-        detailText += ` • ${getCategoryName(item.type, item.categoryId)}`;
+        detailText += ` • ${getCategoryName(item.categoryId)}`;
         if (item.installmentGroupId) {
             detailText += ` • Parcela ${item.installmentNumber}/${item.installmentTotal}`;
         }
@@ -2763,7 +2863,7 @@ safeOn("standaloneTransactionForm", "submit", event => {
     const type = currentTransactionsType;
     const date = $("standaloneDate").value;
     const installments = type === "credit" ? Number($("standaloneInstallments").value) : 1;
-    const categoryId = normalizeCategoryId(type, $("standaloneCategory").value);
+    const categoryId = normalizeCategoryId($("standaloneCategory").value, type);
 
     if (!description || !Number.isFinite(totalAmount) || totalAmount <= 0 || !date) {
         alert("Preencha os dados corretamente.");
@@ -2903,7 +3003,7 @@ function buildRecurringRow(item) {
 
     const details = document.createElement("small");
     const end = version.endDate ? `até ${formatDate(version.endDate)}` : "sem data fim";
-    details.textContent = `${getCategoryName(item.type, item.categoryId)} • Início ${formatDate(version.startDate)} • ${end}`;
+    details.textContent = `${getCategoryName(item.categoryId)} • Início ${formatDate(version.startDate)} • ${end}`;
 
     info.append(name, details);
 
@@ -3013,7 +3113,7 @@ safeOn("recurringEditForm", "submit", event => {
 
     const description = $("recurringEditDescription").value.trim();
     const amountValue = Number($("recurringEditAmount").value);
-    const categoryId = normalizeCategoryId(item.type, $("recurringEditCategory").value);
+    const categoryId = normalizeCategoryId($("recurringEditCategory").value, item.type);
 
     if (!description || !Number.isFinite(amountValue) || amountValue <= 0) {
         alert("Preencha os dados corretamente.");
@@ -3108,7 +3208,7 @@ safeOn("recurringForm", "submit", event => {
     const amount = Number($("recurringAmount").value);
     const startDate = $("recurringStart").value;
     const frequency = $("recurringFrequency").value;
-    const categoryId = normalizeCategoryId(currentRecurringType, $("recurringCategory").value);
+    const categoryId = normalizeCategoryId($("recurringCategory").value, currentRecurringType);
 
     if (!description || !Number.isFinite(amount) || amount <= 0 || !startDate) {
         alert("Preencha os dados corretamente.");
@@ -3260,8 +3360,8 @@ function openDeleteOptions(scope) {
     const descEl = $("deleteModalDescription");
     if (descEl) {
         descEl.textContent = scope === "all"
-            ? "Escolha quais categorias deseja apagar de todo o aplicativo. Esta ação não pode ser desfeita."
-            : `Escolha quais categorias deseja apagar de ${monthName}. Os lançamentos recorrentes continuarão cadastrados. Esta ação não pode ser desfeita.`;
+            ? "Escolha o que deseja apagar em todo o aplicativo. Esta ação não pode ser desfeita. No modo completo, as categorias personalizadas também serão removidas."
+            : `Escolha o que deseja apagar de ${monthName}. Os lançamentos recorrentes continuarão cadastrados. As categorias são preservadas. Esta ação não pode ser desfeita.`;
     }
 
     const oneEl = $("deleteOneTimeCheckbox");
@@ -3293,6 +3393,13 @@ function confirmSelectedDeletion() {
             initialBalances = {};
             invoiceSettings = {};
             savedDescriptions = [];
+
+            // Apaga categorias personalizadas — mantém apenas "Outros"
+            categories = [];
+            ensureOthersCategory();
+            nextCategoryColorIndex = 0;
+            chartFilters.categoryKeys.clear();
+            selectedCategoryKey = null;
         }
         const msg = $("backupMessage");
         if (msg) msg.textContent = "";
@@ -3404,7 +3511,7 @@ safeOn("invoiceConfigModal", "click", event => {
 safeOn("exportButton", "click", () => {
     const backup = {
         application: "Meu Financeiro",
-        version: 18,
+        version: 19,
         exportedAt: new Date().toISOString(),
         ...getDataSnapshot(),
         recurring
