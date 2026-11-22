@@ -888,7 +888,7 @@ async function saveToDrive() {
 
 function getInvoiceConfig(date = selectedDate) {
     const key = monthKey(date);
-    return invoiceSettings[key] || { start: 14, end: 15, due: 20 };
+    return invoiceSettings[key] || { start: 13, end: 12, due: 21 };
 }
 
 function saveInvoiceConfig() {
@@ -1480,9 +1480,9 @@ function renderDashboard() {
             } else if (percent < 70) {
                 hint.textContent = `Você está gastando ${percent}% do que entra. Boa margem.`;
             } else if (percent < 100) {
-                hint.textContent = `Atenção: ${percent}% da sua entrada está indo para saídas no débito.`;
+                hint.textContent = `Atenção: ${percent}% da sua entrada está indo para saídas.`;
             } else {
-                hint.textContent = `Alerta: suas saídas no débito superam as entradas.`;
+                hint.textContent = `Alerta: suas saídas superam as entradas.`;
             }
         }
 
