@@ -17,7 +17,7 @@
     <div class="header-top">
         <div>
             <h1>Meu Financeiro</h1>
-            <p>Planejamento e controle financeiro</p>
+            <p>Planejamento e controle</p>
         </div>
         <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema" title="Alternar tema">
             <span id="themeToggleIcon">🌙</span>
@@ -55,7 +55,7 @@
         <section class="balance-card">
             <div class="balance-main">
                 <div>
-                    <span>Saldo projetado do mês</span>
+                    <span>Saldo do mês</span>
                     <h2 id="balance">R$ 0,00</h2>
                 </div>
                 <div>
@@ -74,7 +74,7 @@
                     <strong id="totalInvoice">R$ 0,00</strong>
                 </div>
                 <div>
-                    <small>Saídas no débito</small>
+                    <small>Saídas</small>
                     <strong id="totalExpenses">R$ 0,00</strong>
                 </div>
             </div>
@@ -84,10 +84,10 @@
             <h3>Adicionar entradas/saídas</h3>
             <div class="action-row">
                 <button id="openTransactionsMenu" class="primary-button" type="button">
-                    Para este mês
+                    Pontual
                 </button>
                 <button id="openRecurringMenu" class="primary-button" type="button">
-                    Recorrentes
+                    Recorrente
                 </button>
             </div>
         </section>
@@ -106,14 +106,13 @@
 
         <section class="section">
             <button id="toggleCalendarButton" class="expand-button" type="button">
-                <span>Calendário</span>
+                <span>Calendário financeiro</span>
                 <span id="toggleCalendarIcon">▸</span>
             </button>
 
             <div id="calendarSection" class="hidden">
                 <div class="section-title" style="margin-top:14px">
-                    <h3>Calendário</h3>
-                    <span>Toque nos valores para lançar</span>
+                    <span>Toque nos valores para lançar ou gerenciar os valores do dia.</span>
                 </div>
 
                 <div class="calendar-wrapper">
@@ -128,15 +127,6 @@
                     <div id="dailyList"></div>
                 </div>
 
-                <div class="calendar-legend">
-                    <span><i class="dot green-dot"></i> Entrada</span>
-                    <span><i class="dot blue-dot"></i> Crédito</span>
-                    <span><i class="dot red-dot"></i> Débito</span>
-                </div>
-
-                <p class="helper">
-                    Toque em qualquer valor para lançar ou gerenciar lançamentos do dia.
-                </p>
             </div>
         </section>
 
@@ -151,7 +141,7 @@
                     <h3>Backup dos dados</h3>
 
                     <p class="helper">
-                        Exporte seus registros e programações para um arquivo JSON.
+                        Exporte seus registros para um arquivo JSON.
                     </p>
 
                     <button id="exportButton" class="primary-button" type="button">
@@ -167,9 +157,9 @@
                 </div>
 
                 <div class="reset-section" style="margin-top:16px">
-                    <h3>Zerar aplicativo</h3>
+                    <h3>Restaurar aplicativo</h3>
                     <p class="helper">
-                        Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste aparelho. No modo "todos os dados", as categorias personalizadas também são removidas.
+                        Apaga todos os lançamentos, programações, saldos iniciais e configurações da fatura salvos neste perfil. No modo "todos os dados", as categorias personalizadas também são removidas.
                     </p>
 
                     <button id="resetAppButton" class="danger-button" type="button">
@@ -222,11 +212,11 @@
                     <strong id="dashKpiIncome">R$ 0,00</strong>
                 </div>
                 <div class="dash-kpi dash-kpi-debit">
-                    <small>Saídas no débito</small>
+                    <small>Saídas</small>
                     <strong id="dashKpiDebit">R$ 0,00</strong>
                 </div>
                 <div class="dash-kpi dash-kpi-invoice">
-                    <small>Fatura do cartão</small>
+                    <small>Faturas</small>
                     <strong id="dashKpiInvoice">R$ 0,00</strong>
                 </div>
                 <div class="dash-kpi dash-kpi-balance">
@@ -237,7 +227,7 @@
 
             <div class="dash-compare">
                 <div class="dash-compare-header">
-                    <span>Débito × Entrada</span>
+                    <span>Saídas × Entradas</span>
                     <strong id="dashComparePercent">0%</strong>
                 </div>
                 <div class="dash-compare-track">
@@ -268,11 +258,11 @@
                     <div class="filter-check-list">
                         <label class="filter-check-item">
                             <input type="checkbox" id="filterTypeDebit" checked>
-                            <span>Débito</span>
+                            <span>Débito (não considera fatura)</span>
                         </label>
                         <label class="filter-check-item">
                             <input type="checkbox" id="filterTypeInvoice" checked>
-                            <span>Fatura do cartão</span>
+                            <span>Crédito</span>
                         </label>
                     </div>
                 </div>
@@ -284,11 +274,11 @@
                     <div class="filter-check-list">
                         <label class="filter-check-item">
                             <input type="checkbox" id="filterOriginOneTime" checked>
-                            <span>Pontuais</span>
+                            <span>Pontual</span>
                         </label>
                         <label class="filter-check-item">
                             <input type="checkbox" id="filterOriginRecurring" checked>
-                            <span>Recorrentes</span>
+                            <span>Recorrente</span>
                         </label>
                     </div>
                 </div>
@@ -362,7 +352,7 @@
 
         <section class="section">
             <button id="toggleProjectionButton" class="expand-button" type="button">
-                <span>Saldo projetado futuro</span>
+                <span>Saldo projetado</span>
                 <span id="toggleProjectionIcon">▸</span>
             </button>
 
@@ -379,18 +369,15 @@
         </section>
 
         <section class="section">
-            <h3>Ações rápidas</h3>
+            <h3>Adicionar entradas/saídas</h3>
             <div class="action-row">
                 <button id="dashOpenTransactionsMenu" class="primary-button" type="button">
-                    Novo lançamento
+                    Pontual
                 </button>
                 <button id="dashOpenRecurringMenu" class="primary-button" type="button">
-                    Recorrentes
+                    Recorrente
                 </button>
             </div>
-            <p class="helper" style="margin-top:10px">
-                O mês do lançamento é definido pela data informada no formulário.
-            </p>
         </section>
 
     </div>
@@ -416,7 +403,7 @@
 
     <div id="transactionsListModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="transactionsListTitle">
         <div class="modal-card" style="max-width:560px">
-            <h3 id="transactionsListTitle">Lançamentos</h3>
+            <h3 id="transactionsListTitle">Adicionar valor pontual</h3>
             <p class="helper" id="transactionsListMonthLabel"></p>
 
             <div id="transactionsListContainer"></div>
@@ -424,11 +411,11 @@
             <div id="transactionFormContainer" class="hidden">
                 <form id="standaloneTransactionForm" style="margin-top:16px">
                     <label for="standaloneDescription">Descrição</label>
-                    <input id="standaloneDescription" type="text" placeholder="Ex: Compra, salário" required>
-                    <datalist id="standaloneDescriptionList"></datalist>
+                    <input id="standaloneDescription" type="text" placeholder="Ex: Salário, compra, comida" required>
+                    <datalist id="standaloneDescriptionList"></datalist>                    
 
                     <label for="standaloneCategory">Categoria</label>
-                    <div class="category-row">
+		            <div class="category-row">
                         <select id="standaloneCategory" required></select>
                         <button type="button" class="icon-button" data-new-category="standaloneCategory" data-category-type="standalone" title="Nova categoria">+</button>
                         <button type="button" class="icon-button" data-manage-category="standaloneCategory" data-category-type="standalone" title="Gerenciar categorias">⚙️</button>
@@ -472,7 +459,7 @@
 
                     <div class="form-buttons">
                         <button type="submit" class="primary-button">
-                            Salvar lançamento
+                            Salvar
                         </button>
                         <button type="button" class="cancel-button" id="closeStandaloneForm">
                             Cancelar
@@ -494,7 +481,7 @@
 
     <div id="recurringMenu" class="modal-overlay hidden" role="dialog" aria-modal="true">
         <div class="modal-card" style="max-width:560px">
-            <h3>Lançamentos recorrentes</h3>
+            <h3>Adicionar valor recorrente</h3>
             <p class="helper" id="recurringMonthLabel"></p>
 
             <div class="recurring-tabs">
@@ -545,7 +532,7 @@
 
                     <div class="form-buttons">
                         <button type="submit" class="primary-button">
-                            Salvar lançamento recorrente
+                            Salvar
                         </button>
                         <button type="button" class="cancel-button" id="closeRecurringForm">
                             Cancelar
@@ -612,7 +599,7 @@
 
     <div id="balanceConfigModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="balanceConfigTitle">
         <div class="modal-card">
-            <h3 id="balanceConfigTitle">Configuração do saldo</h3>
+            <h3 id="balanceConfigTitle">Configuração do saldo inicial</h3>
             <p class="helper" id="balanceConfigMonthLabel"></p>
 
             <label for="initialBalance">Saldo inicial do mês (R$)</label>
@@ -640,7 +627,7 @@
 
             <div class="invoice-highlight">
                 <div>
-                    <small>Fatura do mês</small>
+                    <small>Valor da fatura</small>
                     <strong id="invoiceAmount">R$ 0,00</strong>
                 </div>
                 <div>
@@ -777,7 +764,7 @@
 
                 <div class="form-buttons">
                     <button type="submit" class="primary-button">
-                        Salvar lançamento
+                        Salvar
                     </button>
                     <button type="button" class="cancel-button" id="closeTransactionForm">
                         Cancelar
