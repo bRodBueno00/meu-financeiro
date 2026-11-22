@@ -291,6 +291,7 @@ safeOn("newCategoryForm", "submit", event => {
 
     closeNewCategoryModal();
     renderFiltersDropdown();
+    refreshOpenCategorySelects();
 });
 
 // ---- Modal de gestão de categorias (lista única) ----
