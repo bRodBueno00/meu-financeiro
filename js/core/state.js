@@ -1,9 +1,3 @@
-/* ============================================================
-   ESTADO GLOBAL — state.js
-   Declara as variáveis de estado do app em um só lugar.
-   Não contém lógica: apenas declarações.
-   Deve ser carregado ANTES de app.js e goals.js.
-   ============================================================ */
 
 "use strict";
 
