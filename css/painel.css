@@ -1,0 +1,213 @@
+/* ===== CARTÃO DE SALDO ===== */
+
+.balance-card {
+    background: linear-gradient(135deg, #1747a6, #2563eb);
+    color: white;
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 15px;
+}
+
+html[data-theme="dark"] .balance-card {
+    background: linear-gradient(135deg, #0f2d6b, #1d4ed8);
+}
+
+.balance-main {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+
+.balance-main > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.balance-main > div > span { font-size: 13px; opacity: .9; }
+.balance-main h2 { font-size: 24px; overflow-wrap: anywhere; }
+
+.balance-details {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.balance-details div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.balance-details small { opacity: .8; }
+
+/* ===== FATURA ===== */
+
+.invoice-highlight {
+    background: var(--invoice-bg);
+    border: 1px solid var(--invoice-border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.invoice-highlight div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.invoice-highlight small {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.invoice-highlight strong {
+    font-size: 17px;
+    color: var(--primary-dark);
+}
+
+.invoice-settings {
+    border-top: 1px solid var(--border-soft);
+    padding-top: 15px;
+}
+
+.invoice-settings h4 {
+    font-size: 13px;
+    margin-bottom: 13px;
+}
+
+/* ===== CALENDÁRIO DIÁRIO ===== */
+
+.calendar-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.calendar-header,
+.daily-row {
+    display: grid;
+    grid-template-columns: .65fr 1fr 1fr 1fr 1fr;
+    gap: 5px;
+    align-items: center;
+    min-width: 470px;
+}
+
+.calendar-header {
+    background: var(--surface-2);
+    padding: 12px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.daily-row {
+    padding: 11px 6px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px;
+    text-align: center;
+}
+
+.day-cell {
+    font-weight: bold;
+    text-align: left;
+    min-width: 0;
+}
+
+.day-cell small {
+    display: block;
+    color: var(--text-soft);
+    font-size: 9px;
+    margin-top: 3px;
+}
+
+.money-cell {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 4px 2px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.money-cell:active { transform: scale(.96); }
+
+.income-cell { background: var(--income-bg); color: var(--income-fg); }
+.credit-cell { background: var(--credit-bg); color: var(--credit-fg); }
+.debit-cell { background: var(--debit-bg); color: var(--debit-fg); }
+
+.balance-cell {
+    background: var(--balance-bg);
+    color: var(--balance-fg);
+    cursor: default;
+}
+
+.balance-cell.negative { color: var(--debit-fg); }
+
+.calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 13px;
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.calendar-legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.green-dot { background: #16a34a; }
+.blue-dot { background: #2563eb; }
+.red-dot { background: #dc2626; }
+
+/* ===== BACKUP E RESET ===== */
+
+.backup-box {
+    border: 1px solid var(--backup-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.backup-box h3 { margin-bottom: 8px; }
+.backup-box .helper { margin-top: 0; }
+.backup-box .primary-button { margin-bottom: 10px; }
+
+.backup-message {
+    font-size: 12px;
+    margin-top: 10px;
+    color: #16a34a;
+}
+
+.reset-section {
+    border: 1px solid var(--reset-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.reset-section h3 { margin-bottom: 8px; }
+.reset-section .helper { margin-top: 0; }
