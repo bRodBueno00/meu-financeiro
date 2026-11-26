@@ -1,0 +1,39 @@
+/
+├── index.html
+├── manifest.json
+├── icon.png
+├── css/
+│   ├── base.css          (reset, variáveis, tema, tipografia)
+│   ├── layout.css        (header, tabs, main, footer, seções)
+│   ├── components.css    (botões, inputs, cards, modais, chips)
+│   ├── painel.css        (saldo, calendário, backup)
+│   ├── dashboard.css     (KPIs, gráficos, filtros, tops)
+│   └── metas.css         (tudo que hoje é prefixo goal/goals)
+├── js/
+│   ├── core/
+│   │   ├── utils.js      (money, datas, safeOn, makeId, $)
+│   │   ├── storage.js    (localStorage: load/save/migrate)
+│   │   └── state.js      (variáveis globais: transactions, recurring, categories…)
+│   ├── domain/
+│   │   ├── categories.js (regras de categoria)
+│   │   ├── invoice.js    (ciclo de fatura, getInvoiceAmount, getInvoiceDueDate)
+│   │   ├── recurring.js  (versions, overrides, getOccurrencesForMonth)
+│   │   ├── balance.js    (getOpeningBalance, calculateMonthClosing, getDayValues)
+│   │   └── dashboard.js  (getDashRange, computeMonthTotals, filtros, agregações)
+│   ├── cloud/
+│   │   └── drive.js      (login, findOrCreateFolder, uploadOrUpdateFile, load/save)
+│   ├── ui/
+│   │   ├── theme.js
+│   │   ├── navigation.js (abas, swipe, navegação de mês)
+│   │   ├── painel.js     (updatePainel, calendário, modal do dia)
+│   │   ├── dashboard.js  (renderDashboard, gráficos canvas, tops)
+│   │   ├── transactions.js (formulários de lançamento)
+│   │   ├── recurring-ui.js
+│   │   ├── categories-ui.js
+│   │   └── backup.js
+│   ├── goals/
+│   │   ├── goals-state.js
+│   │   ├── goals-domain.js (getGoalProgress, cálculos)
+│   │   ├── goals-ui.js     (renderGoalsView, cards, modais)
+│   │   └── goals-cloud.js  (Drive de metas.json)
+│   └── main.js           (inicialização: chama load, bind, render)
